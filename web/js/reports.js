@@ -3,7 +3,7 @@
 import { api } from './api.js';
 import {
   mountShell, icon, esc, money, moneyShort, duration, dateOnly, dateTime, titleCase,
-  skeleton, empty, emptyRow, errorState, facility,
+  skeleton, empty, errorState, facility, dataTable, tableToCSV, toast, errorToast, methodLabel,
 } from './ui.js';
 import { enter, revealList, countTo, bindInteractive } from './motion.js';
 import { lineChart, barChart, stackBar } from './charts.js';
@@ -16,6 +16,7 @@ const TABS = [
   { id: 'passes',     label: 'Pass usage', view: 'v_pass_usage' },
   { id: 'violations', label: 'Violations', view: 'v_violations' },
   { id: 'free',       label: 'Free slots', view: 'v_free_slots' },
+  { id: 'vehicle',    label: 'Vehicle history', view: 'v_session_duration' },
 ];
 
 const ctx = mountShell('reports.html', {
@@ -29,6 +30,8 @@ async function init({ content, user }) {
     <div class="toolbar">
       <label class="sr-only" for="facility">Facility</label>
       <select class="select" id="facility" style="max-width:260px"></select>
+      <span class="spacer"></span>
+      <button class="btn btn-sm" type="button" id="export" disabled>${icon('download')} Export CSV</button>
     </div>
     <div class="tabs" id="tabs" role="tablist" aria-label="Reports"></div>
     <div id="panel"></div>`;
@@ -74,18 +77,34 @@ async function init({ content, user }) {
     if (TABS.some((t) => t.id === id) && id !== active) show(id);
   });
 
+  content.querySelector('#export').addEventListener('click', () => {
+    const tables = content.querySelectorAll('#panel table');
+    const table = tables[tables.length - 1];
+    if (!table) return;
+    const n = tableToCSV(table, `smartpark-${active}-${selF.selectedOptions[0]?.textContent
+      .trim().toLowerCase().replace(/\s+/g, '-') || 'all'}.csv`);
+    toast('Export ready', `${n} rows from the ${TABS.find((t) => t.id === active).label} report.`, 'success');
+  });
+
   async function show(id) {
     active = id;
-    tabsHost.querySelectorAll('.tab').forEach((b) =>
-      b.setAttribute('aria-selected', String(b.dataset.tab === id)));
+    tabsHost.querySelectorAll('.tab').forEach((b) => {
+      const on = b.dataset.tab === id;
+      b.setAttribute('aria-selected', String(on));
+      b.tabIndex = on ? 0 : -1;            // roving tabindex: Tab enters the list once
+    });
+    content.querySelector('#export').disabled = true;
+    selF.disabled = id === 'vehicle' || selF.options.length < 2;
     const host = content.querySelector('#panel');
     host.setAttribute('role', 'tabpanel');
     host.setAttribute('aria-labelledby', `tab-${id}`);
     skeleton(host, { rows: 4 });
     const fid = Number(selF.value);
     try {
-      await ({ occupancy, peak, revenue, duration: dur, passes, violations, free }[id])(host, fid);
+      await ({ occupancy, peak, revenue, duration: dur, passes, violations, free,
+               vehicle: vehicleHistory }[id])(host, fid);
       enter(host);
+      content.querySelector('#export').disabled = !host.querySelector('table');
     } catch (err) { errorState(host, err, () => show(id)); }
   }
 }
@@ -261,7 +280,7 @@ async function revenue(host, fid) {
           <th scope="col" class="num">Amount</th><th scope="col" class="num">Share</th></tr></thead>
         <tbody>${d.by_method.map((m) => {
           const totalPaid = d.by_method.reduce((a, x) => a + Number(x.amount), 0);
-          return `<tr><td>${esc(titleCase(m.method))}</td>
+          return `<tr><td>${esc(methodLabel(m.method))}</td>
             <td class="num mono">${m.n}</td>
             <td class="num money">${esc(money(m.amount))}</td>
             <td class="num mono">${(Number(m.amount) / totalPaid * 100).toFixed(1)}%</td></tr>`;
@@ -376,7 +395,7 @@ async function passes(host, fid) {
           <th scope="col" class="num">Paid</th><th scope="col" class="num">Stays</th>
           <th scope="col" class="num">Time used</th><th scope="col">State</th></tr></thead>
         <tbody>${rows.map((r) => `<tr>
-          <td>${esc(r.customer_name)}</td><td class="plate">${esc(r.plate_number)}</td>
+          <td>${esc(r.customer_name)}</td><td class="reg">${esc(r.plate_number)}</td>
           <td>${esc(r.pass_type_name)}</td>
           <td class="mono" style="white-space:nowrap">${esc(dateOnly(r.valid_from))} →
             ${esc(dateOnly(r.valid_to))}</td>
@@ -427,7 +446,7 @@ async function violations(host, fid) {
           <td class="mono" style="white-space:nowrap">${esc(dateTime(v.detected_at))}</td>
           <td><span class="badge badge-${v.is_resolved ? 'paid' : 'unpaid'}">${
             esc(titleCase(v.kind))}</span></td>
-          <td class="plate">${esc(v.plate_number)}</td>
+          <td class="reg">${esc(v.plate_number)}</td>
           <td>${esc(v.customer_name)}</td>
           <td class="mono">${esc(v.slot_code || '—')}</td>
           <td class="num money">${esc(money(v.penalty_amount))}</td>
@@ -485,4 +504,90 @@ function animateCounts(host) {
     });
   });
   revealList(host.querySelectorAll('tbody tr'), { step: 0.01, budget: 0.5 });
+}
+
+/* --- Vehicle history ---------------------------------------------------- */
+async function vehicleHistory(host) {
+  host.innerHTML = viewNote('v_session_duration',
+    'Every stay one vehicle has made, across all facilities, with the bill each produced.') + `
+    <form class="history-search" id="hist-form" novalidate>
+      <div class="field" style="margin:0;flex:1;max-width:340px">
+        <label for="hist-plate">Registration number</label>
+        <input class="input reg" id="hist-plate" placeholder="TS09AB1234" autocomplete="off"
+               spellcheck="false" maxlength="12">
+        <div class="field-error"></div>
+      </div>
+      <button class="btn btn-primary" type="submit">${icon('search')} Show history</button>
+    </form>
+    <div id="hist-result"></div>`;
+  const form = host.querySelector('#hist-form');
+  const input = host.querySelector('#hist-plate');
+  const out = host.querySelector('#hist-result');
+  input.addEventListener('input', () => { input.value = input.value.toUpperCase().replace(/[^A-Z0-9]/g, ''); });
+  let remembered = null;
+  try { remembered = sessionStorage.getItem('sp.history.plate'); } catch { /* optional */ }
+  empty(out, { title: 'Look up a vehicle', body: 'Enter a registration to see every stay, bill and its status.',
+               iconName: 'history' });
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const plate = input.value.trim();
+    if (plate.length < 4) { input.focus(); return; }
+    skeleton(out, { rows: 4 });
+    let d;
+    try { d = await api.report.vehicleHistory(plate); }
+    catch (err) {
+      if (err.status === 404) {
+        empty(out, { title: `No vehicle ${plate} on file`, body: 'Check the registration and try again.', iconName: 'search' });
+      } else errorState(out, err);
+      return;
+    }
+    try { sessionStorage.setItem('sp.history.plate', plate); } catch { /* optional */ }
+    const v = d.vehicle;
+    const minutes = d.stays.filter((s) => !s.is_active).reduce((a, s) => a + Number(s.duration_minutes), 0);
+    out.innerHTML = `
+      <div class="stat-row">
+        <div class="stat"><div class="stat-label">Vehicle</div>
+          <div class="stat-value"><span class="plate-chip big-chip">${esc(v.plate_number)}</span></div>
+          <div class="stat-foot">${esc([v.make, v.model, v.colour].filter(Boolean).join(' ') || v.vehicle_type_name)}</div></div>
+        <div class="stat"><div class="stat-label">Owner</div>
+          <div class="stat-value stat-text">${esc(v.customer_name)}</div>
+          <div class="stat-foot mono">${esc(v.phone)}</div></div>
+        <div class="stat"><div class="stat-label">Stays</div>
+          <div class="stat-value" data-count="${d.totals.stays}">0</div>
+          <div class="stat-foot">${esc(duration(minutes))} parked in total</div></div>
+        <div class="stat stat-accent"><div class="stat-label">Billed</div>
+          <div class="stat-value" data-count="${d.totals.billed}" data-money="1">₹0</div></div>
+      </div>
+      <section class="card"><div id="hist-table"></div></section>`;
+    dataTable(out.querySelector('#hist-table'), {
+      caption: `Stays for ${v.plate_number}`,
+      rows: d.stays,
+      searchPlaceholder: 'Search ticket, facility or bay',
+      csv: `smartpark-history-${v.plate_number}.csv`,
+      sort: { key: 'entry_time', dir: 'desc' },
+      emptyTitle: 'No stays recorded for this vehicle',
+      columns: [
+        { key: 'ticket_no', label: 'Ticket', render: (s) => `<span class="mono">${esc(s.ticket_no)}</span>` },
+        { key: 'facility_name', label: 'Facility', render: (s) => esc(s.facility_name) },
+        { key: 'slot_code', label: 'Bay', render: (s) => `<span class="mono nowrap">${esc(s.slot_code)}</span>` },
+        { key: 'entry_time', label: 'Entered', render: (s) => `<span class="mono nowrap">${esc(dateTime(s.entry_time))}</span>` },
+        { key: 'exit_time', label: 'Exited', render: (s) => s.is_active
+            ? '<span class="badge badge-occupied">Still parked</span>'
+            : `<span class="mono nowrap">${esc(dateTime(s.exit_time))}</span>` },
+        { key: 'duration_minutes', label: 'Stay', num: true,
+          render: (s) => `<span class="mono nowrap">${esc(duration(s.duration_minutes))}</span>` },
+        { key: 'total_amount', label: 'Bill', num: true,
+          render: (s) => s.total_amount == null ? '<span class="muted">—</span>'
+            : `<span class="money nowrap">${esc(money(s.total_amount))}</span>` },
+        { key: 'bill_status', label: 'Status', render: (s) => s.bill_status
+            ? `<span class="badge badge-${esc(s.bill_status)}">${esc(titleCase(s.bill_status))}</span>`
+            : '<span class="muted">—</span>' },
+      ],
+    });
+    animateCounts(out);
+  });
+
+  if (remembered) { input.value = remembered; form.requestSubmit(); }
+  else input.focus();
 }

@@ -258,6 +258,12 @@ def test_payment_cannot_exceed_the_balance(client, op1):
     assert r.status_code == 201 and r.json()["status"] == "paid"
 
 
+def test_a_free_stay_is_settled_not_unpaid():
+    # A ₹0 bill can never receive a payment, so it must not be left "unpaid".
+    stuck = sql("SELECT count(*) AS n FROM bill WHERE total_amount = 0 AND status = 'unpaid'")[0]["n"]
+    assert stuck == 0
+
+
 # --------------------------------------------------------------------------
 # Ledger, activity, audit, reports, dashboard
 # --------------------------------------------------------------------------

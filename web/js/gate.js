@@ -33,7 +33,7 @@ async function init({ content, user }) {
         <form id="entry-form" novalidate>
           <div class="field">
             <label for="plate">Registration number</label>
-            <input class="input plate" id="plate" name="plate" autocomplete="off"
+            <input class="input reg" id="plate" name="plate" autocomplete="off"
                    placeholder="TS09AB1234" spellcheck="false" required
                    aria-describedby="plate-hint">
             <div class="help" id="plate-hint">Letters and digits only, no spaces.</div>
@@ -51,7 +51,7 @@ async function init({ content, user }) {
         <form id="exit-form" novalidate>
           <div class="field">
             <label for="lookup">Ticket or registration</label>
-            <input class="input plate" id="lookup" name="lookup" autocomplete="off"
+            <input class="input reg" id="lookup" name="lookup" autocomplete="off"
                    placeholder="TK-A1B2C3D4 or TS09AB1234" spellcheck="false" required>
             <div class="field-error" id="lookup-error"></div>
           </div>
@@ -110,7 +110,7 @@ async function init({ content, user }) {
       }
       tbody.innerHTML = rows.map((r) => `<tr>
         <td class="mono">${esc(timeOnly(r.entry_time))}</td>
-        <td class="plate">${esc(r.plate_number)}</td>
+        <td class="reg">${esc(r.plate_number)}</td>
         <td class="mono">${esc(r.slot_code)}</td>
         <td class="mono">${esc(duration(r.duration_minutes))}</td>
         <td><span class="badge ${r.is_active ? 'badge-occupied' : 'badge-paid'}">${
@@ -218,7 +218,7 @@ function setupExit(content, selF) {
     result.innerHTML = `
       <div class="card" style="background:var(--surface-2);border-style:dashed">
         <dl class="dl">
-          <dt>Vehicle</dt><dd class="plate">${esc(s.plate_number)}</dd>
+          <dt>Vehicle</dt><dd class="reg">${esc(s.plate_number)}</dd>
           <dt>Customer</dt><dd>${esc(s.customer_name)}</dd>
           <dt>Bay</dt><dd class="mono">${esc(s.slot_code)}</dd>
           <dt>Ticket</dt><dd class="mono">${esc(s.ticket_no)}</dd>
@@ -286,7 +286,7 @@ function setupExit(content, selF) {
           Bay <strong class="mono">${esc(r.slot_code)}</strong> is free again.
           Bill <strong class="mono">#${r.bill_id}</strong> has been raised.</p>
         <dl class="dl">
-          <dt>Vehicle</dt><dd class="plate">${esc(s.plate_number)}</dd>
+          <dt>Vehicle</dt><dd class="reg">${esc(s.plate_number)}</dd>
           <dt>Duration</dt><dd class="mono">${esc(duration(r.billable_minutes))}</dd>
           <dt>Parking charge</dt><dd class="money">${esc(money(r.base_amount))}</dd>
           <dt>Tax</dt><dd class="money">${esc(money(r.tax_amount))}</dd>

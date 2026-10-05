@@ -122,7 +122,12 @@ export const api = {
   buyPass:    (b)  => post('/api/passes', b),
   cancelPass: (id) => del(`/api/passes/${id}`),
 
-  bills:      (s)  => get(`/api/bills${s && s !== 'all' ? `?status=${s}` : ''}`),
+  bills: (s, q = '', limit = 200) => {
+    const p = new URLSearchParams({ limit });
+    if (s && s !== 'all') p.set('status', s);
+    if (q) p.set('q', q);
+    return get(`/api/bills?${p}`);
+  },
   bill:       (id) => get(`/api/bills/${id}`),
   pay:        (b)  => post('/api/payments', b),
 

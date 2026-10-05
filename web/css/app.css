@@ -47,7 +47,7 @@ a:hover { text-decoration: underline; text-underline-offset: 2px; }
 
 /* Every figure is tabular. A counter animating from 0 to 1,204 must not
    change the width of its column while it does so. */
-.mono, .num, td.num, .stat-value, .money, .plate, .bay-code, .clock, .metric-value {
+.mono, .num, td.num, .stat-value, .money, .reg, .plate-chip, .bay-code, .clock, .metric-value {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
   font-feature-settings: 'tnum' 1;
@@ -634,7 +634,7 @@ kbd {
 .input:hover, .select:hover { border-color: var(--ink-3); }
 .input:focus, .select:focus { border-color: var(--accent); }
 .input::placeholder { color: var(--ink-2); }
-.input.plate, .input.code {
+.input.reg, .input.code {
   font-family: var(--font-mono); text-transform: uppercase; letter-spacing: .09em;
 }
 .field[data-invalid="true"] .input, .field[data-invalid="true"] .select {
@@ -651,6 +651,58 @@ kbd {
 .cell-strong { font-weight: 500; color: var(--ink); white-space: nowrap; }
 .dt td .mono { white-space: nowrap; }
 .muted { color: var(--ink-2); }
+.small { font-size: var(--t-xs); }
+.strong { font-weight: 600; color: var(--ink); }
+.big { font-size: var(--t-md); }
+.nowrap { white-space: nowrap; }
+.due, .dl .due { color: var(--alert-ink); }
+.reg { letter-spacing: .06em; }
+.rule-gap.tight { margin: var(--s4) 0; }
+
+/* A registration plate in a table: the one value an operator scans for, so it
+   reads as a small painted plate rather than plain text. */
+.plate-chip {
+  display: inline-block; padding: 1px 6px; border: 1px solid var(--rule-strong);
+  border-radius: 2px; background: var(--surface); color: var(--ink);
+  font-size: var(--t-xs); letter-spacing: .06em; white-space: nowrap;
+}
+.cell-sub { font-size: var(--t-2xs); color: var(--ink-2); margin-top: 2px; white-space: nowrap; }
+.stat-alert .stat-value { color: var(--alert-ink); }
+.seg-count { font-family: var(--font-mono); font-size: var(--t-2xs); opacity: .65; margin-left: 4px; }
+
+/* One line naming the database rule behind a screen: the viva talking point,
+   kept quiet so it never competes with the data. */
+.rule-note {
+  display: flex; align-items: center; gap: var(--s2); margin: 0;
+  padding: var(--s2) var(--s5); font-size: var(--t-xs); color: var(--ink-2);
+  background: var(--surface-2); border-bottom: 1px solid var(--rule);
+}
+.rule-note svg { width: 13px; height: 13px; flex: none; color: var(--accent-ink); }
+.rule-note code { font-family: var(--font-mono); font-size: var(--t-2xs); color: var(--ink);
+                  background: var(--surface); border: 1px solid var(--rule); padding: 0 4px; border-radius: 2px; }
+.tab svg { width: 15px; height: 15px; vertical-align: -3px; margin-right: var(--s2); stroke-width: 1.7; }
+
+/* Payment-method mix above the ledger. */
+.ledger-mix:empty { display: none; }
+.ledger-mix {
+  display: grid; grid-template-columns: auto 1fr; gap: var(--s2) var(--s5); align-items: center;
+  padding: var(--s4) var(--s5); border-bottom: 1px solid var(--rule);
+}
+.mix-total { display: flex; flex-direction: column; gap: 2px; grid-row: span 2; }
+.mix-amount { font-family: var(--font-display); font-size: var(--t-xl); font-weight: 600;
+              font-variant-numeric: tabular-nums; }
+.mix-legend { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap;
+              gap: var(--s2) var(--s5); font-size: var(--t-xs); }
+.mix-legend li { display: flex; align-items: center; gap: var(--s2); }
+.mix-legend i { width: 9px; height: 9px; border-radius: 2px; display: inline-block; }
+
+/* Invoice inside its dialog. */
+.invoice { border: 1px solid var(--rule); border-radius: var(--r); padding: var(--s5); background: var(--surface); }
+.invoice-head { display: flex; justify-content: space-between; gap: var(--s4);
+                align-items: flex-start; margin-bottom: var(--s5); }
+.invoice-facility { font-family: var(--font-display); font-size: var(--t-md); font-weight: 600; }
+.invoice-tariff { margin-bottom: var(--s3); }
+.invoice-sub { font-size: var(--t-sm); font-weight: 500; margin-bottom: var(--s2); }
 .field[data-invalid="true"] .field-error { display: flex; }
 .field-error svg { width: 12px; height: 12px; flex: none; }
 .form-row { display: grid; gap: var(--s4);
@@ -714,6 +766,9 @@ td.num, th.num { text-align: right; }
   padding: var(--s3) var(--s4); border-bottom: 1px solid var(--rule);
 }
 .dt-tools .spacer { flex: 1; }
+.dt tbody { transition: opacity var(--d-ui) var(--ease); }
+.dt[data-busy="true"] tbody { opacity: .5; }
+.dt[data-busy="true"] .dt-search svg { animation: pulse 1s var(--ease) infinite; }
 .dt-search { flex: 0 1 280px; }
 .dt-count { font-size: var(--t-xs); color: var(--ink-2); font-family: var(--font-mono); }
 th .dt-sort {
@@ -1249,3 +1304,16 @@ table.keys td:first-child { width: 7em; }
   body { background: #fff; }
   .panel, .plate { border: 1px solid #ccc; break-inside: avoid; }
 }
+
+.pass-summary { padding: var(--s4); background: var(--surface-2); border: 1px solid var(--rule);
+                border-radius: var(--r); margin-top: var(--s2); }
+
+.history-search { display: flex; align-items: flex-end; gap: var(--s3); flex-wrap: wrap; margin-bottom: var(--s5); }
+.stat-value.stat-text { font-family: var(--font-ui); font-size: var(--t-lg); font-weight: 600; }
+.plate-chip.big-chip { font-size: var(--t-md); padding: 2px 8px; }
+
+.audit-summary { display: inline-block; max-width: 46ch; overflow: hidden; text-overflow: ellipsis;
+                 white-space: nowrap; vertical-align: bottom; font-family: var(--font-mono);
+                 font-size: var(--t-xs); color: var(--ink-2); }
+table.audit-diff td { word-break: break-word; }
+.tabpanel > .panel + .panel { margin-top: var(--s5); }

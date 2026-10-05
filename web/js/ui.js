@@ -92,6 +92,10 @@ export function dateOnly(iso) {
 export const titleCase = (s) => String(s || '').replace(/_/g, ' ')
   .replace(/\b\w/g, (c) => c.toUpperCase());
 
+const METHOD_LABEL = { upi: 'UPI', netbanking: 'Net banking', card: 'Card',
+                       cash: 'Cash', wallet: 'Wallet', pass: 'Pass' };
+export const methodLabel = (m) => METHOD_LABEL[m] || titleCase(m);
+
 /* --- The four async states ---------------------------------------------- */
 export function skeleton(container, { rows = 5, kind = 'row' } = {}) {
   if (!container) return;
@@ -501,6 +505,43 @@ function shortcutHelp(items) {
   });
 }
 
+/* --- Tabs -------------------------------------------------------------------
+   WAI-ARIA tablist: roving tabindex, arrow keys and Home/End move between tabs,
+   and each tab controls a panel by id. */
+export function tabs(host, items, { label, initial = items[0].id, onChange } = {}) {
+  host.classList.add('tabs');
+  host.setAttribute('role', 'tablist');
+  if (label) host.setAttribute('aria-label', label);
+  host.innerHTML = items.map((t) => `<button class="tab" type="button" role="tab"
+      id="tab-${esc(t.id)}" aria-controls="${esc(t.panel)}">${t.icon ? icon(t.icon) : ''}${esc(t.label)}</button>`).join('');
+  const buttons = [...host.querySelectorAll('[role="tab"]')];
+  const select = (id, focus = false) => {
+    buttons.forEach((b, i) => {
+      const on = items[i].id === id;
+      b.setAttribute('aria-selected', String(on));
+      b.tabIndex = on ? 0 : -1;
+      const panel = document.getElementById(items[i].panel);
+      if (panel) { panel.hidden = !on; panel.setAttribute('aria-labelledby', b.id); }
+      if (on && focus) b.focus();
+    });
+    onChange?.(id);
+  };
+  host.addEventListener('click', (e) => {
+    const b = e.target.closest('[role="tab"]');
+    if (b) select(items[buttons.indexOf(b)].id);
+  });
+  host.addEventListener('keydown', (e) => {
+    const at = buttons.indexOf(document.activeElement);
+    if (at < 0) return;
+    const to = { ArrowRight: at + 1, ArrowLeft: at - 1, Home: 0, End: buttons.length - 1 }[e.key];
+    if (to === undefined) return;
+    e.preventDefault();
+    select(items[(to + buttons.length) % buttons.length].id, true);
+  });
+  select(initial);
+  return { select };
+}
+
 /* --- Data table -------------------------------------------------------------
    One table for every list in the app: search, sortable headers (aria-sort),
    pagination, CSV export of the filtered set, and an optional per-row actions
@@ -508,16 +549,22 @@ function shortcutHelp(items) {
 
    column: { key, label, render?(row) -> HTML (must escape its own values),
              value?(row) -> raw value for sort/search/CSV (default row[key]),
-             num?: right-align, sortable?: default true, csv?: false to omit } */
+             num?: right-align, sortable?: default true, csv?: false to omit,
+             csvOnly?: searched and exported but not displayed } */
 export function dataTable(host, {
   columns, rows = [], caption = 'Records', searchKeys = null, pageSize = 12,
   searchPlaceholder = 'Search', emptyTitle = 'Nothing here yet', emptyBody = '',
   csv = null, sort = null, rowActions = null, toolbar = '', onRowClick = null,
+  onSearch = null, note = '',
 } = {}) {
+  // onSearch(q) -> rows: the list is too large to ship whole, so the server
+  // searches; `note` says what the unsearched view shows (e.g. "Latest 200").
+  const all = columns;
+  columns = all.filter((c) => !c.csvOnly);
   const sortAt = sort ? columns.findIndex((c) => c.key === sort.key) : -1;
   const state = { rows, q: '', key: sortAt >= 0 ? sortAt : null, dir: sort?.dir || 'asc', page: 1 };
   const val = (col, row) => (col.value ? col.value(row) : row[col.key]);
-  const searchable = columns.filter((c) => !searchKeys || searchKeys.includes(c.key));
+  const searchable = all.filter((c) => !searchKeys || searchKeys.includes(c.key));
 
   host.innerHTML = `
     <div class="dt">
@@ -556,7 +603,7 @@ export function dataTable(host, {
 
   const filtered = () => {
     const q = state.q.trim().toLowerCase();
-    let out = q ? state.rows.filter((r) =>
+    let out = q && !onSearch ? state.rows.filter((r) =>
       searchable.some((c) => String(val(c, r) ?? '').toLowerCase().includes(q))) : state.rows.slice();
     if (state.key !== null) {
       const col = columns[state.key];
@@ -580,8 +627,10 @@ export function dataTable(host, {
     const start = (state.page - 1) * pageSize;
     const slice = list.slice(start, start + pageSize);
 
-    $('.dt-count').textContent = state.q
-      ? `${list.length} of ${state.rows.length}` : `${state.rows.length} ${state.rows.length === 1 ? 'record' : 'records'}`;
+    const n = (k) => `${k.toLocaleString('en-IN')} ${k === 1 ? 'record' : 'records'}`;
+    $('.dt-count').textContent = onSearch
+      ? (state.q ? `${n(list.length)} found` : (note || n(list.length)))
+      : (state.q ? `${list.length} of ${state.rows.length}` : n(state.rows.length));
 
     host.querySelectorAll('th[data-col]').forEach((th) => {
       const on = Number(th.dataset.col) === state.key;
@@ -613,10 +662,21 @@ export function dataTable(host, {
     state.list = list;
   }
 
-  let t = 0;
+  let t = 0, seq = 0;
+  const runSearch = async (q) => {
+    state.q = q; state.page = 1;
+    if (!onSearch) { render(); return; }
+    const mine = ++seq;
+    host.querySelector('.dt').dataset.busy = 'true';
+    try {
+      const rows = await onSearch(q.trim());
+      if (mine === seq) { state.rows = rows || []; render(); }   // ignore stale replies
+    } catch (err) { if (mine === seq) errorToast('Search failed', err); }
+    finally { if (mine === seq) delete host.querySelector('.dt').dataset.busy; }
+  };
   $('.dt-search input').addEventListener('input', (e) => {
     clearTimeout(t);
-    t = setTimeout(() => { state.q = e.target.value; state.page = 1; render(); }, 120);
+    t = setTimeout(() => runSearch(e.target.value), onSearch ? 260 : 120);
   });
   host.addEventListener('click', (e) => {
     const th = e.target.closest('th[data-col]');
@@ -628,10 +688,10 @@ export function dataTable(host, {
     if (e.target.closest('[data-dt-prev]')) { state.page--; render(); return; }
     if (e.target.closest('[data-dt-next]')) { state.page++; render(); return; }
     if (e.target.closest('[data-dt-clear]')) {
-      const box = $('.dt-search input'); box.value = ''; state.q = ''; render(); box.focus(); return;
+      const box = $('.dt-search input'); box.value = ''; runSearch(''); box.focus(); return;
     }
     if (e.target.closest('[data-dt-csv]')) {
-      downloadCSV(csv, columns.filter((c) => c.csv !== false), state.list || filtered(), val);
+      downloadCSV(csv, all.filter((c) => c.csv !== false), state.list || filtered(), val);
       toast('Export ready', `${(state.list || []).length} rows saved as ${csv}`, 'success');
       return;
     }
@@ -667,6 +727,17 @@ export function downloadCSV(filename, columns, rows, val = (c, r) => r[c.key]) {
   const a = Object.assign(document.createElement('a'), { href: url, download: filename });
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+/** Export a rendered <table> as CSV: what the user sees is what they get. */
+export function tableToCSV(table, filename) {
+  const heads = [...table.querySelectorAll('thead th')].map((th, i) => ({
+    key: i, label: th.textContent.replace(/\s+/g, ' ').trim() }));
+  const rows = [...table.querySelectorAll('tbody tr')]
+    .filter((tr) => !tr.querySelector('.empty'))
+    .map((tr) => [...tr.children].map((td) => td.textContent.replace(/\s+/g, ' ').trim()));
+  downloadCSV(filename, heads.filter((h) => h.label), rows, (c, r) => r[c.key]);
+  return rows.length;
 }
 
 /* --- Actions menu -----------------------------------------------------------

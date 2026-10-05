@@ -164,7 +164,7 @@ export function stackBar(host, segments, { accessibleName = 'Breakdown' } = {}) 
   if (!total) { host.innerHTML = ''; return; }
   const parts = segments.filter((s) => s.value > 0).map((s) => {
     const pct = (s.value / total) * 100;
-    return `<div style="width:${pct}%;background:var(--state-${s.tone});height:100%"
+    return `<div style="width:${pct}%;background:${s.color || `var(--state-${s.tone})`};height:100%"
               title="${esc(s.label)}: ${s.value}"></div>`;
   }).join('');
   host.innerHTML = `<div role="img" aria-label="${esc(accessibleName)}"

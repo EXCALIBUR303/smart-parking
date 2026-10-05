@@ -651,6 +651,7 @@ def cancel_pass(pass_id: int, user: dict = Depends(current_user)):
 # ===========================================================================
 @app.get("/api/bills")
 def bills(status_filter: Optional[str] = Query(None, alias="status"),
+          q: Optional[str] = Query(None, max_length=60),
           limit: int = Query(100, le=500), user: dict = Depends(current_user)):
     sql = ["""
         SELECT b.bill_id, b.session_id, b.billable_minutes, b.base_amount, b.tax_amount,
@@ -675,6 +676,11 @@ def bills(status_filter: Optional[str] = Query(None, alias="status"),
     params = []
     if status_filter and status_filter != "all":
         sql.append("AND b.status = %s::bill_status"); params.append(status_filter)
+    if q and q.strip():
+        term = q.strip()
+        # A bill number, a registration (stored without spaces), or a name.
+        sql.append("AND (b.bill_id::text = %s OR v.plate_number LIKE %s OR c.full_name ILIKE %s)")
+        params += [term.lstrip("#"), f"%{term.upper().replace(' ', '')}%", f"%{term}%"]
     sql.append("ORDER BY b.generated_at DESC LIMIT %s"); params.append(limit)
     with database.session_scope(user["user_id"], user["role"]) as cur:
         cur.execute(" ".join(sql), params)

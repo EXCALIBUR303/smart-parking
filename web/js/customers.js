@@ -177,7 +177,7 @@ async function showVehicles(customer, onDone) {
         <th scope="col">Vehicle</th><th scope="col">State</th>
         <th scope="col" class="dt-act-h"><span class="sr-only">Actions</span></th></tr></thead>
       <tbody>${vs.map((v) => `<tr>
-        <td class="plate">${esc(v.plate_number)}</td>
+        <td class="reg">${esc(v.plate_number)}</td>
         <td>${esc(v.vehicle_type_name)}</td>
         <td>${esc([v.make, v.model, v.colour].filter(Boolean).join(' ') || '—')}</td>
         <td>${v.is_parked ? '<span class="badge badge-occupied">In lot</span>'
@@ -200,7 +200,7 @@ async function showVehicles(customer, onDone) {
         <div class="form-row">
           <div class="field">
             <label for="v-plate">Registration number <span class="req" aria-hidden="true">*</span></label>
-            <input class="input plate" id="v-plate" required placeholder="TS09AB1234"
+            <input class="input reg" id="v-plate" required placeholder="TS09AB1234"
                    spellcheck="false" autocomplete="off" maxlength="12">
             <div class="field-error"></div>
           </div>
@@ -290,7 +290,7 @@ function editVehicle(v, onDone) {
       <form id="ve-form" novalidate>
         <div class="field">
           <label for="ve-plate">Registration number</label>
-          <input class="input plate" id="ve-plate" value="${esc(v.plate_number)}" maxlength="12"
+          <input class="input reg" id="ve-plate" value="${esc(v.plate_number)}" maxlength="12"
                  spellcheck="false" autocomplete="off">
           <div class="help">Owner and vehicle type are fixed once a vehicle is on file.</div>
           <div class="field-error"></div>

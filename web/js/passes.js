@@ -2,66 +2,52 @@
 import { api, auth } from './api.js';
 import {
   mountShell, icon, esc, money, moneyShort, dateOnly, duration, titleCase,
-  emptyRow, errorState, modal, toast, fieldError, clearErrors, submitting, confirmDialog,
+  errorState, modal, toast, errorToast, fieldError, clearErrors, submitting, confirmDialog,
+  dataTable, skeleton,
 } from './ui.js';
-import { enter, revealList, countTo, bindInteractive } from './motion.js';
+import { enter, revealList, countTo } from './motion.js';
+
+const STATES = [['active', 'Active'], ['scheduled', 'Scheduled'], ['expired', 'Expired'],
+                ['cancelled', 'Cancelled'], ['all', 'All']];
 
 const ctx = mountShell('passes.html', {
   title: 'Passes',
-  subtitle: 'Season tickets and their usage',
+  subtitle: 'Season tickets and how much they are used',
 });
 if (ctx) init(ctx);
 
 async function init({ content }) {
   content.innerHTML = `
-    <div class="toolbar">
-      <label class="sr-only" for="state">State</label>
-      <select class="select" id="state" style="max-width:190px">
-        <option value="all">All passes</option>
-        <option value="active">Active</option>
-        <option value="scheduled">Scheduled</option>
-        <option value="expired">Expired</option>
-        <option value="cancelled">Cancelled</option>
-      </select>
-      <div class="spacer"></div>
-      <button class="btn btn-primary" id="sell" data-interactive>${icon('plus')} Sell a pass</button>
-    </div>
     <div id="stats" class="stat-row"></div>
-    <p class="section-note">
-      A pass covers every stay it spans, so those sessions bill at zero. One
-      vehicle cannot hold two live passes at the same facility over the same
-      dates — the database rejects the overlap.
-    </p>
-    <section class="card">
-      <div class="table-wrap">
-        <table><caption class="sr-only">Passes</caption>
-          <thead><tr>
-            <th scope="col">Customer</th><th scope="col">Vehicle</th><th scope="col">Product</th>
-            <th scope="col">Valid</th><th scope="col" class="num">Paid</th>
-            <th scope="col" class="num">Used</th><th scope="col">State</th><th scope="col"></th>
-          </tr></thead><tbody id="rows"></tbody></table>
+    <section class="panel" id="pass-panel">
+      <div class="panel-head">
+        <div class="seg" role="group" aria-label="Pass state" id="pass-seg"></div>
+        <span class="spacer"></span>
+        <button class="btn btn-primary" id="sell" data-interactive>${icon('plus')} Sell a pass</button>
       </div>
+      <p class="rule-note">${icon('lock')}
+        A pass bills every stay it covers at zero. One vehicle cannot hold two live passes at
+        a facility over the same dates (<code>ex_pass_no_overlap</code>).</p>
+      <div id="pass-table"></div>
     </section>`;
 
-  const sel = content.querySelector('#state');
-  sel.addEventListener('change', render);
+  let all = [], state = 'active', table = null;
+  const seg = content.querySelector('#pass-seg');
+  seg.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-state]');
+    if (b) { state = b.dataset.state; paint(); }
+  });
   content.querySelector('#sell').addEventListener('click', () => sellPass(load));
-  enter(content.querySelector('.card'));
-
-  let all = [];
+  enter(content.querySelector('#pass-panel'));
   load();
 
   async function load() {
-    const tbody = content.querySelector('#rows');
-    tbody.innerHTML = `<tr><td colspan="8" style="padding:var(--s4);border:0">
-      <div class="skeleton skeleton-row"></div><div class="skeleton skeleton-row"></div></td></tr>`;
+    const host = content.querySelector('#pass-table');
+    if (!table) skeleton(host, { rows: 5 });
     try { all = await api.passes(); }
-    catch (err) {
-      tbody.innerHTML = '<tr><td colspan="8" style="padding:0;border:0"></td></tr>';
-      errorState(tbody.querySelector('td'), err, load); return;
-    }
+    catch (err) { table = null; errorState(host, err, load); return; }
     renderStats();
-    render();
+    paint();
   }
 
   function renderStats() {
@@ -82,51 +68,58 @@ async function init({ content }) {
       <div class="stat"><div class="stat-label">${icon('car')} Stays covered</div>
         <div class="stat-value" data-count="${all.reduce((a, p) => a + Number(p.sessions_used || 0), 0)}">0</div>
         <div class="stat-foot">sessions billed at zero</div></div>`;
-    revealList(host.querySelectorAll('.stat'));
+    if (!host.dataset.shown) { revealList(host.querySelectorAll('.stat')); host.dataset.shown = '1'; }
     host.querySelectorAll('[data-count]').forEach((el) => countTo(el, Number(el.dataset.count),
       { format: el.dataset.money ? moneyShort : (v) => Math.round(v).toLocaleString('en-IN') }));
   }
 
-  function render() {
-    const tbody = content.querySelector('#rows');
-    const rows = sel.value === 'all' ? all : all.filter((p) => p.pass_state === sel.value);
-    if (!rows.length) {
-      emptyRow(tbody, 8,
-        sel.value === 'all' ? 'No passes sold yet' : `No ${sel.value} passes`,
-        sel.value === 'all' ? 'Use Sell a pass to issue the first one.'
-                            : 'Try a different state filter.');
-      return;
-    }
-    tbody.innerHTML = rows.map((p) => `<tr>
-      <td>${esc(p.customer_name)}</td>
-      <td class="plate">${esc(p.plate_number)}</td>
-      <td>${esc(p.pass_type_name)}</td>
-      <td class="mono" style="white-space:nowrap">${esc(dateOnly(p.valid_from))}
-        <span style="color:var(--ink-2)">→</span> ${esc(dateOnly(p.valid_to))}
-        ${p.pass_state === 'active' ? `<div style="color:var(--ink-2);font-size:var(--t-xs)">${
-          p.days_remaining} days left</div>` : ''}</td>
-      <td class="num money">${esc(money(p.price_paid))}</td>
-      <td class="num mono">${p.sessions_used}
-        <div style="color:var(--ink-2);font-size:var(--t-xs)">${
-          esc(duration(p.minutes_used))}</div></td>
-      <td><span class="badge badge-${esc(p.pass_state)}">${esc(titleCase(p.pass_state))}</span></td>
-      <td style="text-align:right">
-        ${(p.pass_state === 'active' || p.pass_state === 'scheduled')
-          ? `<button class="btn btn-sm btn-danger" data-cancel="${p.pass_id}"
-               data-interactive>Cancel</button>` : ''}</td>
-    </tr>`).join('');
-    revealList(tbody.querySelectorAll('tr'), { step: 0.018 });
-    bindInteractive(tbody);
-    tbody.querySelectorAll('[data-cancel]').forEach((b) => b.addEventListener('click', async () => {
-      if (!await confirmDialog('Cancel this pass?',
-        'The pass stops covering stays from now on. It stays on record for the usage report.',
-        'Cancel pass')) return;
-      try {
-        await api.cancelPass(b.dataset.cancel);
-        toast('Pass cancelled', 'Future stays will be billed at tariff.', 'success');
-        load();
-      } catch (err) { toast('Could not cancel the pass', err.message, 'error'); }
-    }));
+  function paint() {
+    seg.innerHTML = STATES.map(([id, label]) => `<button type="button" data-state="${id}"
+        aria-pressed="${id === state}">${label} <span class="seg-count">${
+        id === 'all' ? all.length : all.filter((p) => p.pass_state === id).length}</span></button>`).join('');
+    const rows = state === 'all' ? all : all.filter((p) => p.pass_state === state);
+    if (table) { table.setRows(rows); return; }
+    table = dataTable(content.querySelector('#pass-table'), {
+      caption: 'Passes',
+      rows,
+      searchPlaceholder: 'Search customer, registration or product',
+      csv: 'smartpark-passes.csv',
+      sort: { key: 'valid_to', dir: 'desc' },
+      emptyTitle: 'No passes in this state',
+      emptyBody: 'Use Sell a pass to issue one, or pick another state.',
+      columns: [
+        { key: 'customer_name', label: 'Customer',
+          render: (p) => `<span class="cell-strong">${esc(p.customer_name)}</span>` },
+        { key: 'plate_number', label: 'Vehicle',
+          render: (p) => `<span class="plate-chip">${esc(p.plate_number)}</span>` },
+        { key: 'pass_type_name', label: 'Product', render: (p) => esc(p.pass_type_name) },
+        { key: 'valid_to', label: 'Valid',
+          render: (p) => `<span class="mono nowrap">${esc(dateOnly(p.valid_from))}
+            <span class="muted">→</span> ${esc(dateOnly(p.valid_to))}</span>
+            ${p.pass_state === 'active' ? `<div class="cell-sub">${p.days_remaining} days left</div>` : ''}` },
+        { key: 'price_paid', label: 'Paid', num: true,
+          render: (p) => `<span class="money nowrap">${esc(money(p.price_paid))}</span>` },
+        { key: 'sessions_used', label: 'Stays', num: true,
+          render: (p) => `<span class="mono">${p.sessions_used}</span>
+            <div class="cell-sub">${esc(duration(p.minutes_used))}</div>` },
+        { key: 'pass_state', label: 'State',
+          render: (p) => `<span class="badge badge-${esc(p.pass_state)}">${esc(titleCase(p.pass_state))}</span>` },
+      ],
+      rowActions: (p) => (p.pass_state === 'active' || p.pass_state === 'scheduled')
+        ? [{ label: 'Cancel pass', icon: 'close', danger: true, onClick: () => cancel(p) }]
+        : [{ label: 'No actions for a closed pass', icon: 'info', disabled: true }],
+    });
+  }
+
+  async function cancel(p) {
+    if (!await confirmDialog('Cancel this pass?',
+      `${p.plate_number}'s ${p.pass_type_name} stops covering stays from now on. It stays on record for the usage report.`,
+      'Cancel pass')) return;
+    try {
+      await api.cancelPass(p.pass_id);
+      toast('Pass cancelled', 'Future stays will be billed at tariff.', 'success');
+      load();
+    } catch (err) { errorToast('Could not cancel the pass', err); }
   }
 }
 
@@ -135,7 +128,7 @@ async function sellPass(onDone) {
   try {
     [customers, passTypes, facilities] = await Promise.all([
       api.customers(), api.passTypes(), api.facilities()]);
-  } catch (err) { toast('Could not open the form', err.message, 'error'); return; }
+  } catch (err) { errorToast('Could not open the form', err); return; }
 
   const today = new Date();
   const local = (d) => new Date(d.getTime() - d.getTimezoneOffset() * 60000)
@@ -231,12 +224,12 @@ async function sellPass(onDone) {
         if (!o?.value) { summary.innerHTML = ''; return; }
         const from = new Date(scrim.querySelector('#p-from').value);
         const to = new Date(from.getTime() + Number(o.dataset.days) * 86400000);
-        summary.innerHTML = `<div class="card" style="background:var(--surface-2)">
+        summary.innerHTML = `<div class="pass-summary">
           <dl class="dl">
-            <dt>Runs for</dt><dd class="mono">${o.dataset.days} days</dd>
+            <dt>Runs for</dt><dd class="mono">${o.dataset.days} ${Number(o.dataset.days) === 1 ? 'day' : 'days'}</dd>
             <dt>Expires</dt><dd class="mono">${esc(dateOnly(to.toISOString()))}</dd>
-            <dt style="font-weight:600;color:var(--ink)">Price</dt>
-            <dd class="money" style="font-weight:600">${esc(money(o.dataset.price))}</dd>
+            <dt class="strong">Price</dt>
+            <dd class="money strong">${esc(money(o.dataset.price))}</dd>
           </dl></div>`;
       };
       tSel.addEventListener('change', refreshSummary);
@@ -268,7 +261,7 @@ async function sellPass(onDone) {
         });
         toast('Pass sold', 'It covers every stay inside its window.', 'success');
         close(); onDone();
-      } catch (err) { fieldError(t, err.message); }
+      } catch (err) { fieldError(t, err.rule ? `${err.message} (${err.rule})` : err.message); }
     });
   }
 }
