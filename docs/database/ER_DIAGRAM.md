@@ -6,6 +6,19 @@ This diagram is drawn from the live schema in `db/migrations/`, not from an
 earlier sketch. Every relationship shown below corresponds to a real foreign
 key you can list with `\d+ <table>` in `psql`.
 
+**Reading the notation (crow's foot).** The marker at each end of a line says
+how many rows at *that* end relate to one row at the other end:
+
+| Marker | Meaning | In this schema |
+|---|---|---|
+| `\|\|` | exactly one | the foreign key is `NOT NULL` |
+| `\|o` / `o\|` | zero or one | the foreign key is nullable, or `UNIQUE` on the child side |
+| `o{` | zero or many | an ordinary one-to-many |
+
+For example `APP_USER |o--o| CUSTOMER`: a customer has at most one login
+(`customer.user_id` is nullable and `UNIQUE`, since walk-in customers have none),
+and a login belongs to at most one customer.
+
 ---
 
 ## 1. Full model
@@ -15,7 +28,7 @@ erDiagram
     FACILITY ||--o{ FLOOR            : "is divided into"
     FACILITY ||--o{ TARIFF           : "prices"
     FACILITY ||--o{ PARKING_PASS     : "honours"
-    FACILITY ||--o{ APP_USER         : "posts operators to"
+    FACILITY |o--o{ APP_USER         : "posts operators to"
     FLOOR    ||--o{ ZONE             : "contains"
     ZONE     ||--o{ SLOT             : "contains"
 
@@ -24,7 +37,7 @@ erDiagram
     VEHICLE_TYPE ||--o{ TARIFF        : "is priced by"
     VEHICLE_TYPE ||--o{ PASS_TYPE     : "is sold for"
 
-    APP_USER ||--o| CUSTOMER          : "may log in as"
+    APP_USER |o--o| CUSTOMER          : "may log in as"
     CUSTOMER ||--o{ VEHICLE           : "owns"
     CUSTOMER ||--o{ RESERVATION       : "books"
     CUSTOMER ||--o{ PARKING_PASS      : "buys"
@@ -36,19 +49,19 @@ erDiagram
 
     SLOT ||--o{ RESERVATION           : "is held by"
     SLOT ||--o{ PARKING_SESSION       : "hosts"
-    SLOT ||--o{ VIOLATION             : "is site of"
+    SLOT |o--o{ VIOLATION             : "is site of"
 
-    RESERVATION ||--o| PARKING_SESSION : "is fulfilled by"
-    PARKING_PASS ||--o{ PARKING_SESSION : "covers"
+    RESERVATION |o--o| PARKING_SESSION : "is fulfilled by"
+    PARKING_PASS |o--o{ PARKING_SESSION : "covers"
     PASS_TYPE   ||--o{ PARKING_PASS    : "is instantiated as"
 
     PARKING_SESSION ||--o| BILL        : "produces"
-    PARKING_SESSION ||--o{ VIOLATION   : "may incur"
+    PARKING_SESSION |o--o{ VIOLATION   : "may incur"
     TARIFF   ||--o{ BILL               : "priced by"
     BILL     ||--o{ PAYMENT            : "is settled by"
-    APP_USER ||--o{ PAYMENT            : "receives"
-    APP_USER ||--o{ PARKING_SESSION    : "operates gate for"
-    APP_USER ||--o{ AUDIT_LOG          : "is the actor in"
+    APP_USER |o--o{ PAYMENT            : "receives"
+    APP_USER |o--o{ PARKING_SESSION    : "operates gate for"
+    APP_USER |o--o{ AUDIT_LOG          : "is the actor in"
 
     FACILITY {
         bigint  facility_id  PK
@@ -59,6 +72,7 @@ erDiagram
         time    closes_at
         numeric tax_rate_pct
         boolean is_active
+        timestamptz created_at
     }
     FLOOR {
         bigint  floor_id     PK
@@ -81,6 +95,7 @@ erDiagram
         text    service_note    "only while out of service"
         smallint grid_row
         smallint grid_col
+        timestamptz created_at
     }
     VEHICLE_TYPE {
         bigint   vehicle_type_id PK
@@ -96,6 +111,7 @@ erDiagram
         user_role role
         bigint    facility_id  FK "required iff role = operator"
         boolean   is_active
+        timestamptz created_at
     }
     CUSTOMER {
         bigint  customer_id PK
@@ -103,6 +119,7 @@ erDiagram
         text    full_name
         text    phone       UK
         citext  email       UK
+        timestamptz created_at
     }
     VEHICLE {
         bigint  vehicle_id      PK
@@ -112,6 +129,7 @@ erDiagram
         text    make
         text    model
         text    colour
+        timestamptz created_at
     }
     TARIFF {
         bigint      tariff_id            PK
@@ -134,6 +152,7 @@ erDiagram
         timestamptz        reserved_from
         timestamptz        reserved_until
         reservation_status status
+        timestamptz created_at
     }
     PARKING_SESSION {
         bigint      session_id       PK
@@ -166,6 +185,7 @@ erDiagram
         timestamptz valid_to
         numeric     price_paid
         timestamptz cancelled_at
+        timestamptz created_at
     }
     BILL {
         bigint      bill_id          PK
@@ -196,6 +216,7 @@ erDiagram
         timestamptz    detected_at
         numeric        penalty_amount
         timestamptz    resolved_at
+        text           notes
     }
     AUDIT_LOG {
         bigint      audit_id      PK
