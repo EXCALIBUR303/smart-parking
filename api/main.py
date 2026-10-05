@@ -8,22 +8,43 @@ security applies, calls a function or runs a query, and maps errors.
 Run:  ./.venv/bin/uvicorn api.main:app --reload --port 8000
 """
 import datetime as dt
+import logging
+import os
+import re
 from decimal import Decimal
 from typing import Optional
 
-from fastapi import Depends, FastAPI, HTTPException, Query, status
-from fastapi.responses import FileResponse, JSONResponse
+import psycopg
+from fastapi import Depends, FastAPI, HTTPException, Query, Request, status
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator
-import psycopg
-import os
 
 from . import db as database
-from .auth import current_user, hash_password, make_token, require_admin, require_staff, verify_password
+from .auth import current_user, make_token, require_admin, require_staff, verify_password
 from .config import WEB_DIR
-from .errors import as_http
+from .errors import DatabaseRuleError, as_http
 
-app = FastAPI(title="Smart Parking API", version="1.0.0")
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+log = logging.getLogger("smartpark.api")
+
+app = FastAPI(title="Smart Parking API", version="1.1.0")
+
+
+@app.exception_handler(DatabaseRuleError)
+def _rule_error(_: Request, exc: DatabaseRuleError):
+    body = {"detail": exc.detail}
+    if exc.rule:
+        body["rule"] = exc.rule
+    return JSONResponse(body, status_code=exc.status_code)
+
+
+@app.exception_handler(Exception)
+def _unexpected(request: Request, exc: Exception):
+    # The traceback stays in the server log; the user gets a plain sentence.
+    log.exception("Unhandled error on %s %s", request.method, request.url.path)
+    return JSONResponse({"detail": "Something went wrong on our side. Please try again."},
+                        status_code=500)
 
 
 @app.on_event("startup")
@@ -84,10 +105,57 @@ class GateExitIn(BaseModel):
         return v.strip().upper()
 
 
+EMAIL_SHAPE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
+def clean_email(v: Optional[str]) -> Optional[str]:
+    """Blank means "no email". Mirrors ck_customer_email_shape in migration 015."""
+    v = (v or "").strip()
+    if v and not EMAIL_SHAPE.match(v):
+        raise ValueError("Enter a valid email address, like name@example.com.")
+    return v or None
+
+
 class CustomerIn(BaseModel):
     full_name: str = Field(min_length=1, max_length=120)
     phone: str = Field(pattern=r"^[0-9]{10}$")
-    email: Optional[str] = None
+    email: Optional[str] = Field(None, max_length=160)
+
+    @field_validator("email")
+    @classmethod
+    def email_shape(cls, v: Optional[str]) -> Optional[str]:
+        return clean_email(v)
+
+
+class CustomerUpdate(BaseModel):
+    """Every field optional: only the fields sent are changed."""
+    full_name: Optional[str] = Field(None, min_length=1, max_length=120)
+    phone: Optional[str] = Field(None, pattern=r"^[0-9]{10}$")
+    email: Optional[str] = Field(None, max_length=160)
+
+    @field_validator("email")
+    @classmethod
+    def email_shape(cls, v: Optional[str]) -> Optional[str]:
+        return clean_email(v)
+
+
+class VehicleUpdate(BaseModel):
+    """Owner and vehicle type are deliberately not editable: both are bound to
+    the vehicle's parking history by composite foreign keys."""
+    plate_number: Optional[str] = None
+    make: Optional[str] = Field(None, max_length=60)
+    model: Optional[str] = Field(None, max_length=60)
+    colour: Optional[str] = Field(None, max_length=30)
+
+    @field_validator("plate_number")
+    @classmethod
+    def normalise(cls, v: Optional[str]) -> Optional[str]:
+        return v.replace(" ", "").replace("-", "").upper() if v else v
+
+
+class SlotServiceIn(BaseModel):
+    in_service: bool
+    note: Optional[str] = Field(None, max_length=200)
 
 
 class VehicleIn(BaseModel):
@@ -180,6 +248,18 @@ def login(body: LoginIn):
 @app.get("/api/auth/me")
 def me(user: dict = Depends(current_user)):
     return ok(user)
+
+
+@app.get("/api/health")
+def health():
+    """Unauthenticated liveness check: the API is up and can reach the database."""
+    try:
+        with database.session_scope(privileged=True) as cur:
+            cur.execute("SELECT 1")
+        return ok({"status": "ok", "database": "up"})
+    except psycopg.Error:
+        log.exception("Health check could not reach the database")
+        return ok({"status": "degraded", "database": "down"}, 503)
 
 
 # ===========================================================================
@@ -280,15 +360,16 @@ def slots(
     user: dict = Depends(current_user),
 ):
     """Live occupancy, straight out of v_current_occupancy."""
-    sql = ["SELECT * FROM v_current_occupancy WHERE facility_id = %s"]
+    sql = ["SELECT o.*, s.service_note FROM v_current_occupancy o "
+           "JOIN slot s ON s.slot_id = o.slot_id WHERE o.facility_id = %s"]
     params = [facility_id]
     if floor_id:
-        sql.append("AND floor_id = %s"); params.append(floor_id)
+        sql.append("AND o.floor_id = %s"); params.append(floor_id)
     if vehicle_type_id:
-        sql.append("AND vehicle_type_id = %s"); params.append(vehicle_type_id)
+        sql.append("AND o.vehicle_type_id = %s"); params.append(vehicle_type_id)
     if state and state != "all":
-        sql.append("AND slot_state = %s"); params.append(state)
-    sql.append("ORDER BY level_number, zone_code, slot_code")
+        sql.append("AND o.slot_state = %s"); params.append(state)
+    sql.append("ORDER BY o.level_number, o.zone_code, o.slot_code")
 
     with database.session_scope(user["user_id"], user["role"]) as cur:
         cur.execute(" ".join(sql), params)
@@ -318,6 +399,28 @@ def free_slots(
     with database.session_scope(user["user_id"], user["role"]) as cur:
         cur.execute(" ".join(sql), params)
         return ok(cur.fetchall())
+
+
+@app.patch("/api/slots/{slot_id}/service")
+def set_slot_service(slot_id: int, body: SlotServiceIn, user: dict = Depends(require_staff)):
+    """Take a bay out of service or return it.
+
+    The rules live in fn_set_slot_service (migration 013): it locks the bay,
+    refuses one that is occupied or held, and limits operators to their own
+    facility. This route only passes the request through.
+    """
+    if not body.in_service and not (body.note or "").strip():
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY,
+                            "Say why the bay is going out of service.")
+    try:
+        with database.session_scope(user["user_id"], user["role"]) as cur:
+            cur.execute("SELECT fn_set_slot_service(%s, %s, %s)",
+                        (slot_id, body.in_service, body.note))
+            cur.execute("SELECT o.*, s.service_note FROM v_current_occupancy o "
+                        "JOIN slot s ON s.slot_id = o.slot_id WHERE o.slot_id = %s", (slot_id,))
+            return ok(cur.fetchone())
+    except Exception as exc:
+        raise as_http(exc)
 
 
 # ===========================================================================
@@ -639,6 +742,45 @@ def record_payment(body: PaymentIn, user: dict = Depends(require_staff)):
         raise as_http(exc)
 
 
+@app.get("/api/payments")
+def payments(facility_id: Optional[int] = None, method: Optional[str] = None,
+             days: int = Query(30, ge=1, le=365), limit: int = Query(200, le=1000),
+             user: dict = Depends(require_staff)):
+    """The receipts ledger. RLS limits an operator to their facility's payments."""
+    where = ["p.paid_at >= now() - make_interval(days => %s)"]
+    params: list = [days]
+    if facility_id:
+        where.append("fl.facility_id = %s"); params.append(facility_id)
+    if method and method != "all":
+        where.append("p.method = %s::payment_method"); params.append(method)
+    base = f"""
+          FROM payment p
+          JOIN bill b ON b.bill_id = p.bill_id
+          JOIN parking_session ps ON ps.session_id = b.session_id
+          JOIN vehicle  v  ON v.vehicle_id = ps.vehicle_id
+          JOIN customer c  ON c.customer_id = v.customer_id
+          JOIN slot     s  ON s.slot_id = ps.slot_id
+          JOIN zone     z  ON z.zone_id = s.zone_id
+          JOIN floor    fl ON fl.floor_id = z.floor_id
+          LEFT JOIN app_user u ON u.user_id = p.received_by
+         WHERE {' AND '.join(where)}"""
+    with database.session_scope(user["user_id"], user["role"]) as cur:
+        cur.execute(f"""
+            SELECT p.payment_id, p.bill_id, p.amount, p.method, p.reference_no, p.paid_at,
+                   b.status AS bill_status, ps.ticket_no, v.plate_number,
+                   c.full_name AS customer_name, s.code AS slot_code, fl.facility_id,
+                   u.full_name AS received_by_name
+            {base}
+             ORDER BY p.paid_at DESC LIMIT %s""", params + [limit])
+        rows = cur.fetchall()
+        cur.execute(f"""
+            SELECT p.method, COUNT(*) AS n, SUM(p.amount) AS amount
+            {base}
+             GROUP BY p.method ORDER BY amount DESC""", params)
+        by_method = cur.fetchall()
+    return ok({"payments": rows, "by_method": by_method})
+
+
 # ===========================================================================
 # Customers and vehicles
 # ===========================================================================
@@ -671,6 +813,50 @@ def create_customer(body: CustomerIn, user: dict = Depends(require_staff)):
                 (body.full_name.strip(), body.phone, (body.email or None)),
             )
             return ok(cur.fetchone(), 201)
+    except Exception as exc:
+        raise as_http(exc)
+
+
+def _update_row(cur, table: str, key: str, key_value: int, changes: dict, returning: str):
+    """UPDATE only the columns the caller sent. Column names come from a
+    Pydantic model's own fields, never from the request body, so they are safe
+    to place in the statement; every value is still a bound parameter."""
+    if not changes:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Nothing to change.")
+    assignments = ", ".join(f"{col} = %s" for col in changes)
+    cur.execute(f"UPDATE {table} SET {assignments} WHERE {key} = %s RETURNING {returning}",
+                [*changes.values(), key_value])
+    return cur.fetchone()
+
+
+@app.patch("/api/customers/{customer_id}")
+def update_customer(customer_id: int, body: CustomerUpdate, user: dict = Depends(require_staff)):
+    changes = body.model_dump(exclude_unset=True)
+    if "full_name" in changes and changes["full_name"]:
+        changes["full_name"] = changes["full_name"].strip()
+    try:
+        with database.session_scope(user["user_id"], user["role"]) as cur:
+            row = _update_row(cur, "customer", "customer_id", customer_id, changes,
+                              "customer_id, full_name, phone, email")
+        if not row:
+            raise HTTPException(404, "Customer not found.")
+        return ok(row)
+    except Exception as exc:
+        raise as_http(exc)
+
+
+@app.delete("/api/customers/{customer_id}")
+def delete_customer(customer_id: int, user: dict = Depends(require_admin)):
+    """Hard delete, allowed only for a customer with no vehicles, bookings or
+    passes. ON DELETE RESTRICT on those foreign keys enforces it."""
+    try:
+        with database.session_scope(user["user_id"], user["role"]) as cur:
+            cur.execute("DELETE FROM customer WHERE customer_id = %s RETURNING customer_id",
+                        (customer_id,))
+            row = cur.fetchone()
+        if not row:
+            raise HTTPException(404, "Customer not found.")
+        return ok(row)
     except Exception as exc:
         raise as_http(exc)
 
@@ -728,6 +914,21 @@ def delete_vehicle(vehicle_id: int, user: dict = Depends(current_user)):
         raise
     except Exception as exc:
         # A vehicle with parking history is protected by ON DELETE RESTRICT.
+        raise as_http(exc)
+
+
+@app.patch("/api/vehicles/{vehicle_id}")
+def update_vehicle(vehicle_id: int, body: VehicleUpdate, user: dict = Depends(current_user)):
+    """RLS decides whose vehicle this caller may edit; a customer only their own."""
+    changes = body.model_dump(exclude_unset=True)
+    try:
+        with database.session_scope(user["user_id"], user["role"]) as cur:
+            row = _update_row(cur, "vehicle", "vehicle_id", vehicle_id, changes,
+                              "vehicle_id, plate_number, make, model, colour")
+        if not row:
+            raise HTTPException(404, "Vehicle not found, or not yours to change.")
+        return ok(row)
+    except Exception as exc:
         raise as_http(exc)
 
 
@@ -850,6 +1051,75 @@ def report_free_slots(facility_id: int = Query(...), user: dict = Depends(curren
         return ok(cur.fetchall())
 
 
+@app.get("/api/reports/vehicle-history")
+def report_vehicle_history(plate: str = Query(min_length=4, max_length=16),
+                           user: dict = Depends(current_user)):
+    """Every stay for one vehicle, from v_session_duration plus each bill's status."""
+    plate = plate.replace(" ", "").replace("-", "").upper()
+    with database.session_scope(user["user_id"], user["role"]) as cur:
+        cur.execute("""
+            SELECT v.vehicle_id, v.plate_number, v.make, v.model, v.colour,
+                   vt.name AS vehicle_type_name, c.full_name AS customer_name, c.phone
+              FROM vehicle v
+              JOIN vehicle_type vt ON vt.vehicle_type_id = v.vehicle_type_id
+              JOIN customer c ON c.customer_id = v.customer_id
+             WHERE v.plate_number = %s
+        """, (plate,))
+        vehicle = cur.fetchone()
+        if not vehicle:
+            raise HTTPException(404, f"No vehicle with registration {plate} is on file.")
+        cur.execute("""
+            SELECT d.session_id, d.ticket_no, d.facility_id, f.name AS facility_name,
+                   d.slot_code, d.entry_time, d.exit_time, d.is_active,
+                   d.duration_minutes, d.total_amount, b.status AS bill_status
+              FROM v_session_duration d
+              JOIN facility f ON f.facility_id = d.facility_id
+              LEFT JOIN bill b ON b.session_id = d.session_id
+             WHERE d.plate_number = %s
+             ORDER BY d.entry_time DESC
+             LIMIT 200
+        """, (plate,))
+        stays = cur.fetchall()
+    total = sum(float(s["total_amount"] or 0) for s in stays)
+    return ok({"vehicle": vehicle, "stays": stays,
+               "totals": {"stays": len(stays), "billed": round(total, 2)}})
+
+
+@app.get("/api/activity")
+def activity(facility_id: int = Query(...), limit: int = Query(15, ge=1, le=100),
+             user: dict = Depends(current_user)):
+    """Newest events first, from v_recent_activity (UNION ALL of five sources)."""
+    with database.session_scope(user["user_id"], user["role"]) as cur:
+        cur.execute("""
+            SELECT occurred_at, kind, ref_id, plate_number, slot_code, amount, detail
+              FROM v_recent_activity
+             WHERE facility_id = %s AND occurred_at <= now()
+             ORDER BY occurred_at DESC
+             LIMIT %s
+        """, (facility_id, limit))
+        return ok(cur.fetchall())
+
+
+@app.get("/api/audit")
+def audit(table: Optional[str] = None, limit: int = Query(50, ge=1, le=500),
+          user: dict = Depends(require_admin)):
+    """The append-only change history written by trg_audit (migration 013)."""
+    sql = ["""
+        SELECT a.audit_id, a.occurred_at, a.table_name, a.row_id, a.action, a.changes,
+               a.actor_role, u.full_name AS actor_name
+          FROM audit_log a
+          LEFT JOIN app_user u ON u.user_id = a.actor_user_id
+         WHERE 1=1
+    """]
+    params: list = []
+    if table:
+        sql.append("AND a.table_name = %s"); params.append(table)
+    sql.append("ORDER BY a.audit_id DESC LIMIT %s"); params.append(limit)
+    with database.session_scope(user["user_id"], user["role"]) as cur:
+        cur.execute(" ".join(sql), params)
+        return ok(cur.fetchall())
+
+
 @app.get("/api/dashboard")
 def dashboard(facility_id: int = Query(...), user: dict = Depends(current_user)):
     """Every figure here is a query result. Nothing on this endpoint is a
@@ -937,9 +1207,19 @@ def dashboard(facility_id: int = Query(...), user: dict = Depends(current_user))
         recent = cur.fetchall()
 
         cur.execute("""
-            SELECT COUNT(*) AS open_violations FROM v_violations WHERE NOT is_resolved
-        """)
+            SELECT COUNT(*) AS open_violations FROM v_violations
+             WHERE NOT is_resolved AND facility_id = %s
+        """, (facility_id,))
         viol = cur.fetchone()
+
+        cur.execute("""
+            SELECT ROUND(AVG(duration_minutes))::int AS avg_stay_minutes,
+                   COUNT(*)                          AS completed_stays
+              FROM v_session_duration
+             WHERE facility_id = %s AND NOT is_active
+               AND exit_time >= now() - INTERVAL '7 days'
+        """, (facility_id,))
+        stays = cur.fetchone()
 
     return ok({
         "slots": slots_row,
@@ -949,6 +1229,7 @@ def dashboard(facility_id: int = Query(...), user: dict = Depends(current_user))
         "trend": trend,
         "recent": recent,
         "violations": viol,
+        "stays_7d": stays,
     })
 
 
