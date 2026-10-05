@@ -284,5 +284,127 @@ ROLLBACK;
 
 \echo ''
 \echo '=========================================================='
+\echo 'TEST 16 Ownership - a booking must use the customer''s own vehicle'
+\echo '  Attempt: reserve for customer A using customer B''s car.'
+\echo '  Expect : foreign key violation on fk_reservation_vehicle_owner'
+\echo '=========================================================='
+BEGIN;
+INSERT INTO reservation (customer_id, vehicle_id, slot_id, reserved_from, reserved_until)
+SELECT other.customer_id, v.vehicle_id, s.slot_id,
+       now() + INTERVAL '60 days', now() + INTERVAL '60 days 2 hours'
+  FROM vehicle v
+  JOIN slot s ON s.vehicle_type_id = v.vehicle_type_id AND s.is_active
+  JOIN customer other ON other.customer_id <> v.customer_id
+ LIMIT 1;
+ROLLBACK;
+
+\echo ''
+\echo '=========================================================='
+\echo 'TEST 17 Ownership - a pass must cover the customer''s own vehicle'
+\echo '  Attempt: sell customer A a pass on customer B''s car.'
+\echo '  Expect : foreign key violation on fk_pass_vehicle_owner'
+\echo '=========================================================='
+BEGIN;
+INSERT INTO parking_pass (customer_id, vehicle_id, pass_type_id, facility_id,
+                          valid_from, valid_to, price_paid)
+SELECT other.customer_id, pp.vehicle_id, pp.pass_type_id, pp.facility_id,
+       now() + INTERVAL '400 days', now() + INTERVAL '430 days', pp.price_paid
+  FROM parking_pass pp
+  JOIN customer other ON other.customer_id <> pp.customer_id
+ LIMIT 1;
+ROLLBACK;
+
+\echo ''
+\echo '=========================================================='
+\echo 'TEST 18 BUSINESS RULE 2 at booking time - bay / vehicle type'
+\echo '  Attempt: reserve a bay built for a different vehicle type.'
+\echo '  Expect : foreign key violation on fk_reservation_slot_type_match'
+\echo '=========================================================='
+BEGIN;
+INSERT INTO reservation (customer_id, vehicle_id, slot_id, reserved_from, reserved_until)
+SELECT v.customer_id, v.vehicle_id, s.slot_id,
+       now() + INTERVAL '61 days', now() + INTERVAL '61 days 2 hours'
+  FROM vehicle v
+  JOIN slot s ON s.vehicle_type_id <> v.vehicle_type_id AND s.is_active
+ LIMIT 1;
+ROLLBACK;
+
+\echo ''
+\echo '=========================================================='
+\echo 'TEST 19 Bay servicing - an out-of-service bay cannot be booked'
+\echo '  Attempt: take a free bay out of service, then reserve it.'
+\echo '  Expect : check violation raised by trg_reservation_prepare'
+\echo '=========================================================='
+BEGIN;
+CREATE TEMP TABLE t19 ON COMMIT DROP AS
+SELECT s.slot_id, s.vehicle_type_id FROM slot s
+ WHERE s.is_active
+   AND NOT EXISTS (SELECT 1 FROM parking_session ps WHERE ps.slot_id = s.slot_id AND ps.exit_time IS NULL)
+   AND NOT EXISTS (SELECT 1 FROM reservation r WHERE r.slot_id = s.slot_id AND r.status IN ('held','confirmed'))
+ LIMIT 1;
+UPDATE slot SET is_active = FALSE, service_note = 'Test 19' WHERE slot_id = (SELECT slot_id FROM t19);
+INSERT INTO reservation (customer_id, vehicle_id, slot_id, reserved_from, reserved_until)
+SELECT v.customer_id, v.vehicle_id, t19.slot_id,
+       now() + INTERVAL '62 days', now() + INTERVAL '62 days 2 hours'
+  FROM t19 JOIN vehicle v ON v.vehicle_type_id = t19.vehicle_type_id
+ LIMIT 1;
+ROLLBACK;
+
+\echo ''
+\echo '=========================================================='
+\echo 'TEST 20 Bay servicing - an occupied bay cannot be taken out'
+\echo '  Attempt: as admin, take a bay with a parked car out of service.'
+\echo '  Expect : "Bay ... has a vehicle in it" from fn_set_slot_service'
+\echo '=========================================================='
+BEGIN;
+SET LOCAL app.current_user_id = '1';
+SET LOCAL ROLE parking_admin;
+SELECT fn_set_slot_service(
+         (SELECT slot_id FROM parking_session WHERE exit_time IS NULL LIMIT 1),
+         FALSE, 'Test 20');
+ROLLBACK;
+
+\echo ''
+\echo '=========================================================='
+\echo 'TEST 21 Bay servicing - a note only describes an idle bay'
+\echo '  Attempt: attach a service note to a bay that is in service.'
+\echo '  Expect : check violation on ck_slot_note_only_when_out'
+\echo '=========================================================='
+BEGIN;
+UPDATE slot SET service_note = 'Paint is fresh'
+ WHERE slot_id = (SELECT slot_id FROM slot WHERE is_active LIMIT 1);
+ROLLBACK;
+
+\echo ''
+\echo '=========================================================='
+\echo 'TEST 22 Operator scoping - bays at another facility'
+\echo '  Attempt: operator posted to facility 1 services a facility 2 bay.'
+\echo '  Expect : "You can only manage bays at your own facility."'
+\echo '=========================================================='
+BEGIN;
+CREATE TEMP TABLE t22 ON COMMIT DROP AS
+SELECT s.slot_id FROM slot s
+  JOIN zone z ON z.zone_id = s.zone_id JOIN floor fl ON fl.floor_id = z.floor_id
+ WHERE fl.facility_id = 2 LIMIT 1;
+GRANT SELECT ON t22 TO parking_operator;
+SET LOCAL app.current_user_id = '2';
+SET LOCAL ROLE parking_operator;
+SELECT fn_set_slot_service((SELECT slot_id FROM t22), FALSE, 'Test 22');
+ROLLBACK;
+
+\echo ''
+\echo '=========================================================='
+\echo 'TEST 23 Audit trail - the history cannot be erased'
+\echo '  Attempt: as admin, delete rows from audit_log.'
+\echo '  Expect : permission denied for table audit_log'
+\echo '=========================================================='
+BEGIN;
+SET LOCAL app.current_user_id = '1';
+SET LOCAL ROLE parking_admin;
+DELETE FROM audit_log;
+ROLLBACK;
+
+\echo ''
+\echo '=========================================================='
 \echo 'ALL CONSTRAINT TESTS COMPLETE'
 \echo '=========================================================='
