@@ -2,7 +2,8 @@
    motion.js — the interaction layer.
 
    Built on the `motion` package (pinned 11.18.2) through its vanilla entry
-   point, since there is no React here. Exports verified present in that build
+   point, since there is no React here. The library is vendored in
+   web/vendor/ (MIT), so the app animates with no internet connection. Exports verified present in that build
    before use: animate, stagger, inView, spring, motionValue.
 
    Reduced motion is resolved ONCE, here, and consulted by every helper. No
@@ -17,15 +18,15 @@ const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
 let reduced = mq.matches;
 mq.addEventListener('change', (e) => { reduced = e.matches || !motionLoaded; });
 
-/* Motion comes from a CDN. Every page imports this module, so a static import
-   that failed (no internet in a viva room) would stop the whole app loading.
-   Loaded dynamically instead: if it is unreachable the app runs without
-   animation, and the stand-in below applies each animation's END state at once
-   so nothing is left invisible or half-drawn. */
+/* Loaded dynamically rather than with a static import: every page imports this
+   module, so if the library ever failed to load, a static import would stop
+   the whole app. Instead the app runs without animation, and the stand-in
+   below applies each animation's END state at once so nothing is left
+   invisible or half-drawn. */
 let animate, stagger, inView, spring, motionLoaded = true;
 try {
   ({ animate, stagger, inView, spring } =
-    await import('https://cdn.jsdelivr.net/npm/motion@11.18.2/+esm'));
+    await import('../vendor/motion-11.18.2.js'));
 } catch {
   motionLoaded = false;
   reduced = true;

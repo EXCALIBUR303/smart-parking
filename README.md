@@ -72,7 +72,7 @@ refusing it in plain English. Keyboard shortcuts: press `?` in the app.
 | Database | PostgreSQL 17 (local), Supabase in the hosted demo | Exclusion constraints, partial indexes, row-level security, PL/pgSQL |
 | Application | Python 3.11, FastAPI, psycopg 3 (raw SQL, no ORM) | Every query is visible and explainable; the database does the work |
 | Auth | bcrypt password hashes, signed JWT | Role and identity are passed to PostgreSQL per request for RLS |
-| Interface | HTML, CSS and ES modules; Motion for animation; hand-drawn SVG charts | No build step; open a file, edit, refresh |
+| Interface | HTML, CSS and ES modules; Motion for animation; hand-drawn SVG charts | No build step; open a file, edit, refresh. Motion and the fonts are vendored in `web/vendor/` and `web/fonts/`, so the app runs fully offline |
 | Tests | psql scripts, pytest, Playwright with the system Chrome | |
 
 ## Architecture

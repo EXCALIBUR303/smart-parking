@@ -227,7 +227,7 @@ servicing; tables that become cards in narrow panels.
 | Sign-in submitted natively (password in the URL) if pressed before the page's module had loaded | Button disabled and native submit blocked until the handler is attached |
 | The departure dialog offered "Record payment" on a ₹0 bill the database had already settled | Only "Done" for a zero bill, with the reason |
 | The audit trail showed raw ISO timestamps | Formatted like every other date in the app |
-| If the animation CDN was unreachable, every page failed to load | Motion is imported dynamically; without it the app runs without animation |
+| If the animation CDN was unreachable, every page failed to load; without Google Fonts the app fell back to system fonts | Motion (MIT) vendored in `web/vendor/`, the three font families (OFL) in `web/fonts/`; verified with every outside request blocked |
 
 **Tests added.** `db/tests/lifecycle_tests.sql` (reservation expiry, overstay,
 pass cover and pass expiry, derived billing); constraint tests 16–24; RLS tests

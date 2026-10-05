@@ -35,8 +35,8 @@ window beside it. All passwords are `Parking@123`.
 
 ## If something goes wrong in the room
 
-- **No internet:** the app runs fully offline; only the animation library is
-  loaded from a CDN, and without it the app still works, just without motion.
+- **No internet:** nothing is needed. The animation library and the fonts
+  are served from the project itself; tested with every outside request blocked.
 - **Demo data looks old:** `psql -d smartpark -f db/scripts/refresh_demo_history.sql`
   moves the seeded history up to the present.
 - **Start clean:** `./setup.sh --reset` rebuilds the database in seconds.
