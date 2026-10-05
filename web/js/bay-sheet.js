@@ -7,7 +7,8 @@
    =========================================================================== */
 import { auth, api } from './api.js';
 import {
-  icon, esc, money, duration, dateTime, timeOnly, titleCase, toast, BAY_WORD,
+  icon, esc, money, duration, dateTime, titleCase, toast, errorToast, BAY_WORD,
+  fieldError, submitting,
 } from './ui.js';
 import { openPanel, closePanel, bindInteractive } from './motion.js';
 
@@ -82,8 +83,11 @@ export function openBaySheet(slot, onChange) {
         <div class="empty" style="margin-top:var(--s5);text-align:left;padding:var(--s4)">
           ${icon('ban')}
           <div class="empty-title" style="font-size:var(--t-sm)">Not in service</div>
-          <p style="font-size:var(--t-xs)">Allocation skips this bay entirely.</p>
-        </div>` : ''}
+          <p style="font-size:var(--t-xs)">${slot.service_note
+            ? `Reason: ${esc(slot.service_note)}` : 'Allocation skips this bay entirely.'}</p>
+        </div>
+        ${auth.isStaff ? `<button class="btn btn-primary btn-block" type="button" id="svc-return"
+            style="margin-top:var(--s4)" data-interactive>${icon('check')} Return to service</button>` : ''}` : ''}
       ${state === 'free' ? `
         <div class="empty" style="margin-top:var(--s5);text-align:left;padding:var(--s4);
                     border-color:var(--state-free-line);background:var(--ok-wash)">
@@ -91,7 +95,20 @@ export function openBaySheet(slot, onChange) {
           <div class="empty-title" style="font-size:var(--t-sm)">Available now</div>
           <p style="font-size:var(--t-xs)">The next arrival of a matching vehicle type may be
           allocated here.</p>
-        </div>` : ''}
+        </div>
+        ${auth.isStaff ? `<form class="service-form" id="svc-form" novalidate>
+          <div class="label">Maintenance</div>
+          <div class="field">
+            <label for="svc-note">Why is it going out of service?</label>
+            <input class="input" id="svc-note" maxlength="200" autocomplete="off"
+                   placeholder="e.g. Drain cover lifted">
+            <div class="field-error"></div>
+          </div>
+          <button class="btn btn-danger btn-block" type="submit" data-interactive>
+            ${icon('wrench')} Take out of service</button>
+          <p class="muted small" style="margin-top:var(--s2)">An occupied or held bay cannot be
+            taken out; the database checks and locks the bay first.</p>
+        </form>` : ''}` : ''}
     </div>
     <div class="sheet-foot">
       ${state === 'occupied' && auth.isStaff
@@ -131,6 +148,28 @@ export function openBaySheet(slot, onChange) {
     await onChange?.();
     restoreFocus();
   }
+
+  sheet.querySelector('#svc-form')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const note = sheet.querySelector('#svc-note');
+    if (!note.value.trim()) { fieldError(note, 'Give a reason, so the next shift knows.'); note.focus(); return; }
+    await submitting(e.submitter || e.currentTarget.querySelector('button'), async () => {
+      try {
+        await api.setSlotService(slot.slot_id, false, note.value.trim());
+        toast('Bay taken out of service', `${slot.slot_code}: ${note.value.trim()}`, 'success');
+        await closeAndRefresh();
+      } catch (err) { fieldError(note, err.message); }
+    });
+  });
+  sheet.querySelector('#svc-return')?.addEventListener('click', async (e) => {
+    await submitting(e.currentTarget, async () => {
+      try {
+        await api.setSlotService(slot.slot_id, true);
+        toast('Bay back in service', `${slot.slot_code} can be allocated again.`, 'success');
+        await closeAndRefresh();
+      } catch (err) { errorToast('Could not return the bay', err); }
+    });
+  });
 
   scrim.addEventListener('click', close);
   sheet.querySelector('[data-close]').addEventListener('click', close);

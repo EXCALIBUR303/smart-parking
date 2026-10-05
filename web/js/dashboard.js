@@ -13,7 +13,7 @@
 import { api, ApiError } from './api.js';
 import {
   mountShell, icon, esc, money, moneyShort, duration, dateTime, timeOnly, titleCase,
-  skeleton, errorState, empty, facility, toast, bayHTML, zoneHTML, groupByZone,
+  skeleton, errorState, empty, facility, toast, bayHTML, zoneHTML, groupByZone, methodLabel,
 } from './ui.js';
 import {
   enter, revealList, countTo, bindInteractive, fillGauge, insertLive,
@@ -91,15 +91,15 @@ async function init({ content, metrics, user }) {
           </div>
         </section>
 
-        <section class="panel" aria-label="Gate activity">
+        <section class="panel" aria-label="Live activity">
           <div class="panel-head">
-            <h2>Gate activity</h2>
+            <h2>Live activity</h2>
             <div class="spacer"></div>
             <span class="label" id="tick-count"></span>
           </div>
           <div class="panel-body flush">
             <div class="ticker" id="ticker" role="log" aria-live="polite"
-                 aria-label="Live gate events"></div>
+                 aria-label="Entries, exits, payments, bookings and violations"></div>
           </div>
         </section>
       </div>
@@ -175,7 +175,12 @@ async function init({ content, metrics, user }) {
     }
     const fid = Number(selF.value);
     let d, slotData;
-    try { [d, slotData] = await Promise.all([api.dashboard(fid), api.slots(fid)]); }
+    let feed = null;
+    try {
+      // The feed is a nice-to-have: if it fails, the map and figures still load.
+      [d, slotData, feed] = await Promise.all([api.dashboard(fid), api.slots(fid),
+        api.activity(fid, 10).catch(() => null)]);
+    }
     catch (err) {
       setLive(false, err.message);
       if (full) { metrics.innerHTML = ''; errorState(content.querySelector('#map'), err, () => load({ full: true })); }
@@ -189,7 +194,7 @@ async function init({ content, metrics, user }) {
     renderLevels();
     renderMap({ animateChanges: !full });
     renderRevenue(d.trend, full);
-    renderTicker(d.recent, full);
+    renderTicker(feed, full);
 
     // The active-customer count is fetched only on a full load (it changes
     // rarely) and only for staff — a customer sees only their own row under
@@ -207,8 +212,11 @@ async function init({ content, metrics, user }) {
     const host = content.querySelector('#summary');
     if (!host) return;
     const s = d.slots;
+    const stay = d.stays_7d || {};
     const cards = [
-      ['clock', 'Held bays', s.reserved, 'reserved, awaiting arrival'],
+      ['clock', 'Average stay', stay.avg_stay_minutes == null ? null : duration(stay.avg_stay_minutes),
+        `${Number(stay.completed_stays || 0).toLocaleString('en-IN')} exits in the last 7 days`],
+      ['calendar', 'Held bays', s.reserved, 'reserved, awaiting arrival'],
       ['ban', 'Out of service', s.out_of_service, 'not available to allocate'],
       ['alert', 'Open violations', d.violations.open_violations, 'awaiting resolution'],
       isStaff
@@ -218,7 +226,8 @@ async function init({ content, metrics, user }) {
     host.innerHTML = cards.map(([ic, label, val, foot]) => `
       <div class="stat">
         <div class="stat-label">${icon(ic)} ${esc(label)}</div>
-        <div class="stat-value">${val == null ? '—' : Number(val).toLocaleString('en-IN')}</div>
+        <div class="stat-value">${val == null ? '—' : typeof val === 'string' ? esc(val)
+          : Number(val).toLocaleString('en-IN')}</div>
         <div class="stat-foot">${esc(foot)}</div>
       </div>`).join('');
     if (full) revealList(host.querySelectorAll('.stat'), { step: 0.04 });
@@ -455,29 +464,41 @@ async function init({ content, metrics, user }) {
     });
   }
 
-  /* --- gate ticker -------------------------------------------------------- */
+  /* --- activity feed: v_recent_activity (UNION ALL of five event sources) */
   function renderTicker(rows, full) {
     const host = content.querySelector('#ticker');
     const count = content.querySelector('#tick-count');
-    if (!rows || !rows.length) {
+    if (rows === null) {
+      host.innerHTML = '<p class="muted small" style="padding:var(--s4)">Activity is unavailable right now.</p>';
+      count.textContent = '';
+      return;
+    }
+    if (!rows.length) {
       host.innerHTML = '';
-      empty(host, { title: 'No gate events yet',
-                    body: 'Record an arrival on the Gate screen to start the log.',
+      empty(host, { title: 'Nothing has happened yet',
+                    body: 'Arrivals, departures, payments and bookings appear here as they happen.',
                     iconName: 'gate' });
       count.textContent = '';
       return;
     }
-    count.textContent = `${rows.length} recent`;
-    const ids = new Set(rows.map((r) => r.ticket_no));
+    count.textContent = `latest ${rows.length}`;
+    const KIND = {
+      entry:       { cls: 'tick-in',   ic: 'arrow-down', word: 'In' },
+      exit:        { cls: 'tick-out',  ic: 'arrow-up',   word: 'Out' },
+      payment:     { cls: 'tick-pay',  ic: 'receipt',    word: 'Paid' },
+      reservation: { cls: 'tick-res',  ic: 'calendar',   word: 'Booked' },
+      violation:   { cls: 'tick-viol', ic: 'alert',      word: 'Violation' },
+    };
+    const detail = (r) => r.kind === 'payment' ? `${moneyShort(r.amount)} · ${methodLabel(r.detail)}`
+      : r.kind === 'violation' ? titleCase(r.detail) : r.slot_code || '';
+    const ids = new Set(rows.map((r) => `${r.kind}-${r.ref_id}`));
     host.innerHTML = rows.map((r) => {
-      const inbound = r.is_active;
-      const when = inbound ? r.entry_time : (r.exit_time || r.entry_time);
-      return `<div class="tick" data-id="${esc(r.ticket_no)}">
-        <span class="tick-time">${esc(timeOnly(when))}</span>
+      const k = KIND[r.kind] || KIND.entry;
+      return `<div class="tick" data-id="${esc(r.kind)}-${esc(r.ref_id)}">
+        <span class="tick-time">${esc(timeOnly(r.occurred_at))}</span>
         <span><span class="tick-plate">${esc(r.plate_number)}</span>
-          <span class="tick-bay"> · ${esc(r.slot_code)}</span></span>
-        <span class="tick-dir ${inbound ? 'tick-in' : 'tick-out'}">
-          ${icon(inbound ? 'arrow-down' : 'arrow-up')}${inbound ? 'In' : 'Out'}</span>
+          <span class="tick-bay"> · ${esc(detail(r))}</span></span>
+        <span class="tick-dir ${k.cls}">${icon(k.ic)}${k.word}</span>
       </div>`;
     }).join('');
 

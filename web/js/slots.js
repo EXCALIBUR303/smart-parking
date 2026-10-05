@@ -9,7 +9,7 @@ import { enter, revealList, bindInteractive, applyBayChanges } from './motion.js
 import { openBaySheet } from './bay-sheet.js';
 
 const ctx = mountShell('slots.html', {
-  title: 'Slot map',
+  title: 'Floor map',
   subtitle: 'Live availability by floor and zone',
 });
 if (ctx) init(ctx);
@@ -91,7 +91,7 @@ async function init({ content, user }) {
 
     renderSummary(content.querySelector('#summary'), data.counts);
     renderTabs(tabs, data.slots, floorFilter, (lvl) => { floorFilter = lvl; load(); });
-    renderMap(host, data.slots, floorFilter, selS.value !== 'all' || selV.value !== 'all');
+    renderMap(host, data.slots, floorFilter, selS.value !== 'all' || selV.value !== 'all', () => load());
     if (announce) toast('Refreshed', 'Slot states are current.', 'success');
   }
 }
@@ -123,7 +123,7 @@ function renderTabs(host, slots, active, onPick) {
     b.addEventListener('click', () => onPick(b.dataset.level)));
 }
 
-function renderMap(host, slots, floorFilter, filtered) {
+function renderMap(host, slots, floorFilter, filtered, onChange) {
   const shown = floorFilter === 'all'
     ? slots : slots.filter((s) => String(s.level_number) === String(floorFilter));
 
@@ -148,7 +148,7 @@ function renderMap(host, slots, floorFilter, filtered) {
   host.querySelectorAll('.bay').forEach((el) => {
     el.addEventListener('click', () => {
       const s = byId.get(el.dataset.slotId);
-      if (s) openBaySheet(s);
+      if (s) openBaySheet(s, onChange);
     });
   });
 }

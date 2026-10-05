@@ -50,7 +50,10 @@ async function request(method, path, body) {
     throw new ApiError('Cannot reach the server. Check that the API is running.', 0);
   }
 
-  if (res.status === 401) {
+  // A 401 on a request that carried a token means the session ended. On the
+  // sign-in call itself it just means wrong credentials, and the server's own
+  // message ("Email or password is incorrect.") is the one to show.
+  if (res.status === 401 && headers.Authorization) {
     auth.clear();
     if (!location.pathname.endsWith('index.html') && location.pathname !== '/') {
       location.href = 'index.html';

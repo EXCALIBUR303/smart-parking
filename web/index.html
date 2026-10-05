@@ -67,8 +67,12 @@
           </div>
           <div class="field">
             <label for="password">Password</label>
-            <input class="input" type="password" id="password" name="password"
-                   autocomplete="current-password" required>
+            <div class="input-wrap">
+              <input class="input" type="password" id="password" name="password"
+                     autocomplete="current-password" required>
+              <button class="btn btn-icon btn-ghost btn-sm input-addon" type="button" id="reveal"
+                      aria-label="Show password" aria-pressed="false"></button>
+            </div>
             <div class="field-error" id="password-error"></div>
           </div>
           <button class="btn btn-primary btn-block btn-lg" type="submit" id="submit"
@@ -261,6 +265,16 @@
     const banner = document.getElementById('banner');
     const email  = document.getElementById('email');
     const pass   = document.getElementById('password');
+    const reveal = document.getElementById('reveal');
+    reveal.innerHTML = icon('eye');
+    reveal.addEventListener('click', () => {
+      const show = pass.type === 'password';
+      pass.type = show ? 'text' : 'password';
+      reveal.innerHTML = icon(show ? 'eye-off' : 'eye');
+      reveal.setAttribute('aria-pressed', String(show));
+      reveal.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
+      pass.focus();
+    });
     const submit = document.getElementById('submit');
 
     demo.querySelectorAll('.demo-chip').forEach((chip) => {

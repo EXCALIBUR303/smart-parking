@@ -868,6 +868,9 @@ table.keys td:first-child { width: 7em; }
             text-transform: uppercase; letter-spacing: var(--track-label); }
 .tick-in  { color: var(--accent-ink); }
 .tick-out { color: var(--ink-2); }
+.tick-pay  { color: var(--violet-ink); }
+.tick-res  { color: var(--state-held-ink); }
+.tick-viol { color: var(--alert-ink); }
 .tick-new { background: var(--accent-wash); }
 
 /* ---------------------------------------- 8. side panel, modal, toast */
@@ -1317,3 +1320,12 @@ table.keys td:first-child { width: 7em; }
                  font-size: var(--t-xs); color: var(--ink-2); }
 table.audit-diff td { word-break: break-word; }
 .tabpanel > .panel + .panel { margin-top: var(--s5); }
+
+.service-form { margin-top: var(--s5); padding-top: var(--s4); border-top: 1px solid var(--rule); }
+.service-form .label { margin-bottom: var(--s3); }
+
+/* A control seated inside a text field (password reveal). */
+.input-wrap { position: relative; }
+.input-wrap .input { padding-right: 42px; }
+.input-addon { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); color: var(--ink-2); }
+.input-addon svg { width: 16px; height: 16px; }

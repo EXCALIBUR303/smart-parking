@@ -1,7 +1,7 @@
 /* settings.js — tariffs, facility structure and the audit trail (admin only). */
 import { api } from './api.js';
 import {
-  mountShell, icon, esc, money, dateOnly, dateTime, titleCase, errorState, skeleton,
+  mountShell, icon, esc, money, dateOnly, dateTime, titleCase, errorState, skeleton, empty,
   modal, toast, errorToast, fieldError, clearErrors, submitting, dataTable, tabs,
 } from './ui.js';
 import { enter } from './motion.js';
@@ -18,7 +18,9 @@ if (ctx) init(ctx);
 
 async function init({ content, user }) {
   if (user.role !== 'admin') {
-    errorState(content, { message: 'Settings are restricted to administrator accounts.' });
+    empty(content, { title: 'Administrators only',
+                     body: 'Tariffs, facility structure and the audit trail are managed by an administrator.',
+                     iconName: 'lock', action: { href: 'dashboard.html', label: 'Back to the dashboard' } });
     return;
   }
 
