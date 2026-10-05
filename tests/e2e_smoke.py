@@ -176,14 +176,17 @@ s, part = call("POST", "/api/payments",
 step("half payment marks the bill partly_paid", part.get("status") == "partly_paid", part.get("status"))
 
 print("\n9. Record a payment")
-s, bill = call("GET", f"/api/bills/{ex['bill_id']}", token=OP)
+s, bill = call("GET", f"/api/bills/{ex2['bill_id']}", token=OP)
 step("bill detail loads", s == 200, f"status {bill.get('status')}")
-amount = float(ex["total_amount"]) or 1.0
+due = round(float(ex2["total_amount"]) - round(float(ex2["total_amount"]) / 2, 2), 2)
 s, pay = call("POST", "/api/payments",
-              {"bill_id": ex["bill_id"], "amount": amount, "method": "upi",
+              {"bill_id": ex2["bill_id"], "amount": due, "method": "upi",
                "reference_no": "E2E-TEST"}, token=OP)
-step("payment recorded", s == 201, f"bill now {pay.get('status')}")
-step("bill marked paid by trigger", pay.get("status") == "paid" or amount == 0, pay.get("status"))
+step("balance payment recorded", s == 201, f"Rs {due}, bill now {pay.get('status')}")
+step("bill marked paid by trigger", pay.get("status") == "paid", pay.get("status"))
+s, r = call("POST", "/api/payments",
+            {"bill_id": ex2["bill_id"], "amount": 1, "method": "cash"}, token=OP)
+step("payment beyond the balance rejected", s == 409, r.get("detail"))
 s, r = call("POST", "/api/payments",
             {"bill_id": ex["bill_id"], "amount": -5, "method": "cash"}, token=OP)
 step("negative payment rejected", s in (409, 422), "rejected")

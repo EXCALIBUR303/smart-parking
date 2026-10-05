@@ -90,6 +90,10 @@ CONSTRAINT_MESSAGES = {
         "A service note can only describe a bay that is out of service.",
 }
 
+# Rules whose trigger writes a message for a human, including figures a fixed
+# string could not know (the balance still owed). Their own wording is shown.
+OWN_WORDING = {"trg_payment_within_balance"}
+
 # What a referencing table means to a person, for "cannot delete" messages.
 REFERENCED_BY = {
     "vehicle": "vehicles on file",
@@ -149,6 +153,9 @@ def as_http(exc: Exception) -> HTTPException:
             return DatabaseRuleError(
                 status.HTTP_409_CONFLICT,
                 f"This record still has {what}, so it cannot be deleted.", rule)
+
+    if rule in OWN_WORDING:
+        return DatabaseRuleError(status.HTTP_409_CONFLICT, raw, rule)
 
     if rule and rule in CONSTRAINT_MESSAGES:
         return DatabaseRuleError(status.HTTP_409_CONFLICT, CONSTRAINT_MESSAGES[rule], rule)

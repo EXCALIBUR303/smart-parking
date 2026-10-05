@@ -237,6 +237,28 @@ def test_bay_service_refusals(client, op1, op2, rahul):
 
 
 # --------------------------------------------------------------------------
+# Payments
+# --------------------------------------------------------------------------
+def test_payment_cannot_exceed_the_balance(client, op1):
+    bill = sql("""SELECT b.bill_id, b.total_amount FROM bill b
+                    JOIN parking_session ps ON ps.session_id = b.session_id
+                    JOIN slot s ON s.slot_id = ps.slot_id JOIN zone z ON z.zone_id = s.zone_id
+                    JOIN floor fl ON fl.floor_id = z.floor_id
+                   WHERE fl.facility_id = 1 AND b.status = 'unpaid' AND b.total_amount > 2
+                     AND NOT EXISTS (SELECT 1 FROM payment p WHERE p.bill_id = b.bill_id)
+                   LIMIT 1""")[0]
+    total = float(bill["total_amount"])
+    r = client.post("/api/payments", headers=op1,
+                    json={"bill_id": bill["bill_id"], "amount": total + 1, "method": "cash"})
+    assert r.status_code == 409 and r.json()["rule"] == "trg_payment_within_balance"
+    assert f"₹{total:.2f} still owed" in r.json()["detail"]
+
+    r = client.post("/api/payments", headers=op1,
+                    json={"bill_id": bill["bill_id"], "amount": total, "method": "upi"})
+    assert r.status_code == 201 and r.json()["status"] == "paid"
+
+
+# --------------------------------------------------------------------------
 # Ledger, activity, audit, reports, dashboard
 # --------------------------------------------------------------------------
 def test_payments_are_scoped_to_the_operators_facility(client, op2, rahul):

@@ -406,5 +406,20 @@ ROLLBACK;
 
 \echo ''
 \echo '=========================================================='
+\echo 'TEST 24 Payment integrity - no paying past the balance'
+\echo '  Attempt: pay one rupee more than an unpaid bill''s total.'
+\echo '  Expect : "That is more than the ₹... still owed on this bill."'
+\echo '=========================================================='
+BEGIN;
+INSERT INTO payment (bill_id, amount, method)
+SELECT b.bill_id, b.total_amount + 1, 'cash'
+  FROM bill b
+ WHERE b.status = 'unpaid' AND b.total_amount > 0
+   AND NOT EXISTS (SELECT 1 FROM payment p WHERE p.bill_id = b.bill_id)
+ LIMIT 1;
+ROLLBACK;
+
+\echo ''
+\echo '=========================================================='
 \echo 'ALL CONSTRAINT TESTS COMPLETE'
 \echo '=========================================================='
