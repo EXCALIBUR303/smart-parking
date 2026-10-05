@@ -40,6 +40,12 @@ Nothing was deleted. The Firebase prototype is archived intact in
 | `010_seed.sql` | Facilities, floors, zones, 134 slots, tariffs, pass products, staff and customer logins, 35 customers, 50 vehicles |
 | `011_seed_history.sql` | ~1,600 sessions over 30 days on a realistic arrival curve, bills, payments, reservations, passes, violations, then `ANALYZE` |
 | `012_column_comments.sql` | `COMMENT ON COLUMN` for every significant column — the source of the Description column in the generated data dictionary |
+| `013_integrity_service_audit.sql` | Ownership FKs for bookings and passes; `reservation.vehicle_type_id` with the rule-2 composite FKs; `slot.service_note` and `fn_set_slot_service`; the `audit_log` table and `trg_audit` on ten tables; `v_recent_activity`; operator-scoped payment and violation policies |
+| `014_supabase_hardening.sql` | Revokes the default privileges Supabase gives its `anon`/`authenticated` roles; no-op on a plain PostgreSQL |
+| `015_customer_email_shape.sql` | `ck_customer_email_shape` |
+| `016_payment_within_balance.sql` | `trg_payment_within_balance`: no payment beyond what is owed, no payment on a waived bill |
+| `017_zero_bill_is_paid.sql` | A ₹0 bill (free period or pass) is settled automatically instead of sitting as "unpaid" |
+| `018_audit_and_rule_comments.sql` | Comments for the objects added in 013–016, for the data dictionary |
 
 All are idempotent enough to replay on a fresh database and are applied in
 filename order by `setup.sh`.
@@ -102,7 +108,10 @@ Everything below moved to `legacy-firebase/` and is referenced by nothing:
 `settings.html`, `css/` (3 files), `js/` (13 files), `firebase.json`,
 `.firebaserc`, `firestore.rules`, `README.old.md`.
 
-There is no git repository here, so deleting would have been unrecoverable.
+There was no git repository at the time, so deleting would have been
+unrecoverable. Since the merge the folder is excluded from the repository by
+`.gitignore`: it stays on the original machine for reference and is not part of
+the submission.
 
 ---
 
@@ -180,3 +189,49 @@ The interface was recomposed, not restyled. Full rationale in
 | Keyboard audit | Closing the bay panel refreshed the map, so focus returned to a detached node |
 | Token audit | 90 references to v1 token names that no longer resolved, across 8 page scripts |
 | Class audit | 21 orphaned class names after the rename — the reason the gate page had no layout |
+
+---
+
+## v3 — merge with the Codex version, and submission hardening
+
+A second implementation of the same brief (React + MySQL, built with Codex) was
+reviewed feature by feature. This PostgreSQL build stayed the primary codebase;
+nothing was copied across wholesale. Where the other version had a feature this
+one lacked, it was re-implemented here on the existing database-first design.
+
+**Database (013–018).** Ownership enforced by composite foreign keys; rule 2
+enforced at booking time as well as at entry; bay servicing as a locked
+function; a trigger-written audit trail; the live activity view; operator
+scoping fixed for payments and violations (an operator at one site could
+previously read the other site's payments); overpayment refused by a trigger;
+₹0 bills settled automatically; Supabase's default API grants revoked.
+
+**API.** Plain-English errors that also name the rule that refused the request;
+customer and vehicle editing and removal; bay servicing; payments ledger;
+activity feed; audit trail; vehicle history report; server-side bill search; a
+wrong password no longer reports an expired session; the API refuses to start
+on Vercel without a real signing secret.
+
+**Interface.** New logo and favicon; shared components (sortable, searchable,
+exportable data tables, action menus, tabs, dialogs with focus trapping,
+keyboard shortcuts, breadcrumbs, a collapsible sidebar); every page rebuilt on
+them; an invoice view; a payments ledger; an audit trail; a bay sheet with
+servicing; tables that become cards in narrow panels.
+
+**Defects found and fixed during final verification.**
+
+| Defect | Fix |
+|---|---|
+| Revenue charts showed only the area fill: the line never drew, because Motion animated `stroke-dashoffset` as an SVG attribute that the inline style outranked | `drawPath` tweens the number and writes the style |
+| The sidebar's active marker sat about 50 px below the selected item | The marker had no `top: 0`, so its offset was added to its in-flow position |
+| Sign-in submitted natively (password in the URL) if pressed before the page's module had loaded | Button disabled and native submit blocked until the handler is attached |
+| The departure dialog offered "Record payment" on a ₹0 bill the database had already settled | Only "Done" for a zero bill, with the reason |
+| The audit trail showed raw ISO timestamps | Formatted like every other date in the app |
+| If the animation CDN was unreachable, every page failed to load | Motion is imported dynamically; without it the app runs without animation |
+
+**Tests added.** `db/tests/lifecycle_tests.sql` (reservation expiry, overstay,
+pass cover and pass expiry, derived billing); constraint tests 16–24; RLS tests
+J–L; `tests/test_api.py` (18 pytest cases); browser checks for every page and
+for the shared components. `docs/TESTING.md` is generated from a real run of
+all of them.
+

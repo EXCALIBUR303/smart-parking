@@ -192,7 +192,11 @@ export function drawPath(path, { duration = 0.85, delay = 0 } = {}) {
   if (reduced) { path.style.strokeDasharray = 'none'; path.style.strokeDashoffset = '0'; return; }
   path.style.strokeDasharray = `${len}`;
   path.style.strokeDashoffset = `${len}`;
-  animate(path, { strokeDashoffset: [len, 0] }, { duration, easing: EASE_OUT, delay });
+  // Tween the number and write the style ourselves: given an SVG element,
+  // Motion animates stroke-dashoffset as an attribute, which the inline style
+  // set above outranks, so the line would never appear.
+  animate(len, 0, { duration, ease: EASE_OUT, delay,
+                    onUpdate: (v) => { path.style.strokeDashoffset = `${v}`; } });
 }
 export function wipeIn(el, { duration = 0.8, delay = 0 } = {}) {
   if (!el) return;

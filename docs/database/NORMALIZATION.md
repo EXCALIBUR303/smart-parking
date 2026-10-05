@@ -52,7 +52,8 @@ F3   floor_id               → facility_id, level_number, name
 F4   {facility_id, level_number} → floor_id                     (candidate key)
 F5   zone_id                → floor_id, code, name
 F6   {floor_id, code}       → zone_id                           (candidate key)
-F7   slot_id                → zone_id, code, vehicle_type_id, is_active, grid_row, grid_col
+F7   slot_id                → zone_id, code, vehicle_type_id, is_active, service_note,
+                              grid_row, grid_col
 F8   {zone_id, code}        → slot_id                           (candidate key)
 ```
 
@@ -93,7 +94,7 @@ F19  session_id             → ticket_no, slot_id, vehicle_id, vehicle_type_id,
 F20  ticket_no              → session_id                        (candidate key)
 F21  {slot_id}   where exit_time IS NULL → session_id           (partial key: rule 1)
 F22  {vehicle_id} where exit_time IS NULL → session_id          (partial key: rule 1)
-F23  reservation_id         → customer_id, vehicle_id, slot_id,
+F23  reservation_id         → customer_id, vehicle_id, slot_id, vehicle_type_id,
                               reserved_from, reserved_until, status
 F24  pass_id                → customer_id, vehicle_id, pass_type_id, facility_id,
                               valid_from, valid_to, price_paid, cancelled_at
@@ -109,6 +110,17 @@ F27  payment_id             → bill_id, amount, method, reference_no, paid_at, 
 F28  violation_id           → kind, session_id, vehicle_id, slot_id,
                               detected_at, penalty_amount, resolved_at
 ```
+
+**History**
+
+```
+F29  audit_id               → occurred_at, actor_user_id, actor_role,
+                              table_name, row_id, action, changes
+```
+
+`actor_role` looks derivable from `actor_user_id` (F9 gives a user's role), but
+it is the role **at the time of the change**, a separate fact that must not
+follow later role changes, for the same reason as `price_paid` below.
 
 **Derived, and therefore deliberately not stored**
 
@@ -301,7 +313,7 @@ cannot be inferred from the dates.
 
 ---
 
-## 5. Two denormalisations, and why they are not breaches
+## 5. Three denormalisations, and why they are not breaches
 
 ### `parking_session.vehicle_type_id`
 
@@ -318,6 +330,14 @@ The usual objection to a derived column is that it can disagree with its source.
 Here disagreement is rejected by the constraint system, so the objection does
 not apply. The alternative — a trigger comparing two types — is weaker: triggers
 can be disabled, and `ALTER TABLE ... DISABLE TRIGGER` is one statement.
+
+### `reservation.vehicle_type_id`
+
+The same device, applied at booking time (migration 013). `reservation` carries
+`vehicle_type_id` with composite foreign keys to `slot (slot_id, vehicle_type_id)`
+and `vehicle (vehicle_id, vehicle_type_id)`, so a car cannot even be *booked*
+into a bike bay. The column is filled by `trg_reservation_prepare` from the
+vehicle, and both keys pin it, so it cannot disagree with either source.
 
 ### `parking_pass.price_paid`
 
@@ -344,11 +364,12 @@ revenue reproducible.
 | `tariff` | ✓ | ✓ | ✓ | temporal, resolves the 1NF time-series |
 | `pass_type` | ✓ | ✓ | ✓ | |
 | `parking_pass` | ✓ | ✓ | ✓ | `price_paid` is a distinct fact (§5) |
-| `reservation` | ✓ | ✓ | ✓ | |
+| `reservation` | ✓ | ✓ | ✓ | `vehicle_type_id` constrained, not copied (§5) |
 | `parking_session` | ✓ | ✓ | ✓ | `vehicle_type_id` constrained, not copied (§5) |
 | `bill` | ✓ | ✓ | ✓ | `total_amount` GENERATED, not stored twice |
 | `payment` | ✓ | ✓ | ✓ | resolves the 1NF repeating group |
 | `violation` | ✓ | ✓ | ✓ | |
+| `audit_log` | ✓ | ✓ | ✓ | `changes` is JSONB, treated as one opaque value: a snapshot, never queried by key in normal operation |
 
 **BCNF.** Every table is also in Boyce–Codd Normal Form: in each, the only
 determinants of a non-trivial FD are candidate keys. No table has two

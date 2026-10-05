@@ -280,12 +280,16 @@ function setupExit(content, selF) {
 
   function showBill(r, s) {
     result.innerHTML = '';
+    // A zero bill is marked paid by the database (trg_bill_enforce_amounts),
+    // so there is nothing to collect and no payment step to offer.
+    const free = Number(r.total_amount) === 0;
     modal({
       title: 'Departure recorded',
       body: `
         <p style="color:var(--ink-2);font-size:var(--t-sm);margin-bottom:var(--s4)">
           Bay <strong class="mono">${esc(r.slot_code)}</strong> is free again.
-          Bill <strong class="mono">#${r.bill_id}</strong> has been raised.</p>
+          Bill <strong class="mono">#${r.bill_id}</strong> has been raised${free
+            ? ' and is already settled: the stay was inside the free period or covered by a pass' : ''}.</p>
         <dl class="dl">
           <dt>Vehicle</dt><dd class="reg">${esc(s.plate_number)}</dd>
           <dt>Duration</dt><dd class="mono">${esc(duration(r.billable_minutes))}</dd>
@@ -294,11 +298,13 @@ function setupExit(content, selF) {
           <dt style="font-weight:600;color:var(--ink)">Total</dt>
           <dd class="money" style="font-weight:600">${esc(money(r.total_amount))}</dd>
         </dl>`,
-      actions: [
-        { label: 'Done', onClick: (c) => c() },
-        { label: 'Record payment', variant: 'primary',
-          onClick: (c) => { c(); location.href = `billing.html?bill=${r.bill_id}`; } },
-      ],
+      actions: free
+        ? [{ label: 'Done', variant: 'primary', onClick: (c) => c() }]
+        : [
+            { label: 'Done', onClick: (c) => c() },
+            { label: 'Record payment', variant: 'primary',
+              onClick: (c) => { c(); location.href = `billing.html?bill=${r.bill_id}`; } },
+          ],
     });
     toast('Departure recorded', `Bill #${r.bill_id} for ${money(r.total_amount)}.`, 'success');
   }

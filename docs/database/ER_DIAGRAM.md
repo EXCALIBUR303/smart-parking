@@ -48,6 +48,7 @@ erDiagram
     BILL     ||--o{ PAYMENT            : "is settled by"
     APP_USER ||--o{ PAYMENT            : "receives"
     APP_USER ||--o{ PARKING_SESSION    : "operates gate for"
+    APP_USER ||--o{ AUDIT_LOG          : "is the actor in"
 
     FACILITY {
         bigint  facility_id  PK
@@ -77,6 +78,7 @@ erDiagram
         text    code            "UK with zone_id"
         bigint  vehicle_type_id FK "UK with slot_id - see rule 2"
         boolean is_active
+        text    service_note    "only while out of service"
         smallint grid_row
         smallint grid_col
     }
@@ -128,6 +130,7 @@ erDiagram
         bigint             customer_id    FK
         bigint             vehicle_id     FK
         bigint             slot_id        FK
+        bigint             vehicle_type_id FK "composite FK to both - see rule 2"
         timestamptz        reserved_from
         timestamptz        reserved_until
         reservation_status status
@@ -194,7 +197,22 @@ erDiagram
         numeric        penalty_amount
         timestamptz    resolved_at
     }
+    AUDIT_LOG {
+        bigint      audit_id      PK
+        timestamptz occurred_at
+        bigint      actor_user_id FK "SET NULL - history outlives the user"
+        user_role   actor_role
+        text        table_name
+        bigint      row_id
+        text        action        "INSERT / UPDATE / DELETE"
+        jsonb       changes       "{column: {from, to}} for UPDATE"
+    }
 ```
+
+`AUDIT_LOG` has no foreign key to the rows it describes: it records ten
+different tables (`table_name`, `row_id`), and its entries must survive the
+deletion of the row they describe. It is written only by the `trg_audit`
+trigger and readable only by administrators.
 
 ---
 
@@ -241,7 +259,9 @@ flowchart TD
 ```
 
 Because `parking_session.vehicle_type_id` is pinned simultaneously to the
-slot's type and the vehicle's type, the two are forced equal. Lying about the
+slot's type and the vehicle's type, the two are forced equal. `reservation`
+carries `vehicle_type_id` and the same pair of composite keys, so a booking
+for the wrong kind of bay is refused at booking time too (TESTING.md test 18). Lying about the
 type in either direction fails — proven in `docs/TESTING.md`, tests 3 and 3b.
 
 ---
@@ -262,6 +282,9 @@ type in either direction fails — proven in `docs/TESTING.md`, tests 3 and 3b.
 | reservation → parking_session | 1 : 0..1 | `parking_session.reservation_id` UNIQUE |
 | app_user → customer | 1 : 0..1 | `customer.user_id` UNIQUE, nullable |
 | facility + vehicle_type → tariff | 1 : N, **one in force at a time** | `ex_tariff_no_overlap` (GiST exclusion) |
+| vehicle + facility → parking_pass | 1 : N, **one live at a time** | `ex_pass_no_overlap` (GiST exclusion) |
+| customer → reservation / pass, **own vehicles only** | 1 : N | `fk_reservation_vehicle_owner`, `fk_pass_vehicle_owner` — composite FK onto `vehicle (vehicle_id, customer_id)` |
+| app_user → audit_log | 1 : N | `audit_log.actor_user_id`, ON DELETE SET NULL |
 
 ---
 

@@ -25,3 +25,7 @@ MODEL_HANDOFF.md
 
 # The retired Firebase build's web config carries a project API key
 legacy-firebase/js/firebase-config.js
+
+# The inherited Firebase prototype, superseded by the PostgreSQL build. Kept
+# on disk for reference only; never part of the submitted project.
+legacy-firebase/

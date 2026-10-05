@@ -12,6 +12,12 @@ DATABASE_URL = os.environ.get(
 )
 
 JWT_SECRET = os.environ.get("SMARTPARK_JWT_SECRET", "dev-only-change-me")
+
+# A hosted deployment that forgot the secret would sign tokens with a key that
+# is printed in this public file, so anyone could forge an admin session.
+# Refuse to start rather than run that way.
+if os.environ.get("VERCEL") and JWT_SECRET == "dev-only-change-me":
+    raise RuntimeError("SMARTPARK_JWT_SECRET must be set in a deployed environment")
 JWT_ALGORITHM = "HS256"
 JWT_TTL_HOURS = 12
 

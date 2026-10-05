@@ -129,7 +129,7 @@ a:hover { text-decoration: underline; text-underline-offset: 2px; }
    rather than each item painting its own bar, so the transition is continuous
    — the eye tracks one object instead of watching two things blink. */
 .nav-indicator {
-  position: absolute; left: var(--s3); width: 3px;
+  position: absolute; top: 0; left: var(--s3); width: 3px;
   background: var(--accent); border-radius: 0 2px 2px 0;
   pointer-events: none; opacity: 0;
 }

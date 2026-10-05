@@ -469,6 +469,35 @@ SELECT i.indexrelid::regclass::text AS index_name,
    AND obj_description(i.indexrelid, 'pg_class') IS NOT NULL
  ORDER BY t.relname, index_name;
 
+-- ----------------------------------------------------------------------------
+-- Q17. JSONB: the audit trail - who changed a bill's status, from what to what
+--      The ->/->> operators read inside the {column: {from, to}} document the
+--      trg_audit trigger writes.
+-- ----------------------------------------------------------------------------
+\echo ''
+\echo '=== Q17  JSONB: status changes on bills, newest first ==='
+SELECT a.occurred_at::timestamp(0)              AS at,
+       COALESCE(u.full_name, 'database session') AS who,
+       a.row_id                                  AS bill_id,
+       a.changes -> 'status' ->> 'from'          AS status_from,
+       a.changes -> 'status' ->> 'to'            AS status_to
+  FROM audit_log a
+  LEFT JOIN app_user u ON u.user_id = a.actor_user_id
+ WHERE a.table_name = 'bill' AND a.action = 'UPDATE' AND a.changes ? 'status'
+ ORDER BY a.occurred_at DESC
+ LIMIT 10;
+
+-- ----------------------------------------------------------------------------
+-- Q18. The live activity view (UNION ALL of five event kinds)
+-- ----------------------------------------------------------------------------
+\echo ''
+\echo '=== Q18  View: the ten most recent events at facility 1 ==='
+SELECT occurred_at::timestamp(0) AS at, kind, plate_number, slot_code, amount, detail
+  FROM v_recent_activity
+ WHERE facility_id = 1
+ ORDER BY occurred_at DESC
+ LIMIT 10;
+
 \timing off
 \echo ''
 \echo '=== queries.sql complete ==='

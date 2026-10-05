@@ -57,7 +57,10 @@
 
         <div class="auth-banner" id="banner" role="alert"></div>
 
-        <form id="form" novalidate>
+        <!-- The handler below is a module, which loads after the page. Until it is
+             ready the button stays disabled and the form cannot submit natively,
+             which would otherwise put the password into the URL. -->
+        <form id="form" novalidate onsubmit="return false">
           <div class="field">
             <label for="email">Email address</label>
             <input class="input" type="email" id="email" name="email"
@@ -76,7 +79,7 @@
             <div class="field-error" id="password-error"></div>
           </div>
           <button class="btn btn-primary btn-block btn-lg" type="submit" id="submit"
-                  data-interactive>Sign in</button>
+                  data-interactive disabled>Sign in</button>
         </form>
 
         <div class="demo">
@@ -289,6 +292,7 @@
       });
     });
 
+    submit.disabled = false;
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
       clearErrors(form);

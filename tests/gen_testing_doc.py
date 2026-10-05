@@ -1,33 +1,45 @@
 """Regenerate docs/TESTING.md from freshly captured test output.
 
-Runs the three suites and builds the document from what they actually printed,
+Runs every suite and builds the document from what they actually printed,
 so the file always reports a real run rather than a remembered one.
 
     ./.venv/bin/python tests/gen_testing_doc.py
 
-Requires the API to be running for the end-to-end section.
+Requires the API to be running (for the end-to-end and browser sections)
+and Google Chrome installed. The pytest suite uses its own smartpark_test
+database; the SQL suites use $SMARTPARK_DB (default smartpark).
 """
+import os
 import pathlib
 import re
 import subprocess
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 PSQL = "/opt/homebrew/opt/postgresql@17/bin/psql"
-DB = "smartpark"
-TMP = pathlib.Path("/tmp")
+DB = os.environ.get("SMARTPARK_DB", "smartpark")
+
+
+SUITES = [
+    ("ct",    [PSQL, "-d", DB, "-f", "db/tests/constraint_tests.sql"]),
+    ("rls",   [PSQL, "-d", DB, "-f", "db/tests/rls_tests.sql"]),
+    ("life",  [PSQL, "-d", DB, "-f", "db/tests/lifecycle_tests.sql"]),
+    ("e2e",   ["./.venv/bin/python", "tests/e2e_smoke.py"]),
+    ("py",    ["./.venv/bin/pytest", "-v", "-p", "no:warnings", "tests/test_api.py"]),
+    ("pages", ["./.venv/bin/python", "tests/page_smoke.py"]),
+    ("comp",  ["./.venv/bin/python", "tests/a11y_components.py"]),
+    ("contr", ["./.venv/bin/python", "tests/a11y_contrast.py"]),
+]
 
 
 def run_suites():
-    for out, cmd in [
-        ("sp_ctests.txt", [PSQL, "-d", DB, "-f", "db/tests/constraint_tests.sql"]),
-        ("sp_rls.txt",    [PSQL, "-d", DB, "-f", "db/tests/rls_tests.sql"]),
-        ("sp_e2e.txt",    ["./.venv/bin/python", "tests/e2e_smoke.py"]),
-    ]:
-        with open(TMP / out, "w") as fh:
-            subprocess.run(cmd, cwd=ROOT, stdout=fh, stderr=subprocess.STDOUT)
-    return ((TMP / "sp_ctests.txt").read_text(),
-            (TMP / "sp_rls.txt").read_text(),
-            (TMP / "sp_e2e.txt").read_text())
+    out = {}
+    for key, cmd in SUITES:
+        # One stream, so psql's ERROR lines stay inside the test they belong to.
+        r = subprocess.run(cmd, cwd=ROOT, stdout=subprocess.PIPE,
+                           stderr=subprocess.STDOUT, text=True)
+        # Chrome writes its own diagnostics to stderr; keep only our output.
+        out[key] = "\n".join(l for l in r.stdout.splitlines() if not l.startswith("[pid="))
+    return out
 
 
 def parse_constraint_blocks(ct):
@@ -48,7 +60,8 @@ def scalar(text, label):
     return m.group(1) if m else "?"
 
 
-def build(ct, rls, e2e):
+def build(r):
+    ct, rls, e2e = r["ct"], r["rls"], r["e2e"]
     blocks = parse_constraint_blocks(ct)
     refused = len([b for b in blocks if any("ERROR" in l for l in b["lines"])])
     L, w = [], None
@@ -65,12 +78,28 @@ def build(ct, rls, e2e):
     w("```\n")
     w("| Suite | What it proves | Result |")
     w("|---|---|---|")
+    life_rows = re.findall(r"^\s*(PASS|FAIL)\s*\|\s*(.+)$", r["life"], re.M)
+    py_pass = len(re.findall(r" PASSED", r["py"]))
+    py_fail = len(re.findall(r" FAILED", r["py"]))
+    comp = re.search(r"(\d+)/(\d+) component checks passed", r["comp"])
+    contr = re.search(r"TOTAL below AA: (\d+)", r["contr"])
+    pages_ok = "FAILING PAGES: none" in r["pages"]
     w(f"| Constraint tests | Each business rule rejects its violation | "
-      f"**{refused} of {len(blocks)} attempts refused by the database**; the "
-      f"remaining one is accepted and silently corrected, which is TEST 8's point |")
+      f"**{refused} of {len(blocks)} attempts refused by the database**; "
+      f"{len(blocks) - refused} accepted and silently corrected (TEST 8's point) |")
+    w(f"| Lifecycle tests | Expiry, overstay, passes, derived billing | "
+      f"**{sum(1 for x in life_rows if x[0] == 'PASS')} of {len(life_rows)} pass** |")
     w("| RLS tests | Policies restrict rows, and fail closed | **Pass** |")
     w(f"| End-to-end smoke | Sign-in → reserve → entry → exit → bill → payment → "
       f"reports | **{e2e.count('[PASS]')} checks, {e2e.count('[FAIL]')} failures** |")
+    w(f"| API tests (pytest) | CRUD, ownership, servicing, payments, scoping | "
+      f"**{py_pass} passed, {py_fail} failed** |")
+    w(f"| Browser: every page | Console errors and failed requests, 1440×900 | "
+      f"**{'No errors on any page' if pages_ok else 'FAILURES - see section 6'}** |")
+    w(f"| Browser: components | Keyboard, dialogs, tabs, reduced motion | "
+      f"**{comp.group(1) + ' of ' + comp.group(2) if comp else '?'} pass** |")
+    w(f"| Browser: contrast | Text below WCAG AA on all 10 pages | "
+      f"**{contr.group(1) if contr else '?'} elements** |")
     w("")
     w("---\n")
 
@@ -222,6 +251,43 @@ def build(ct, rls, e2e):
             w(line.rstrip())
     w("```\n")
 
+    # ------------------------------------------------------------ lifecycle
+    w("---\n")
+    w("## 3b. Lifecycle tests — rules that depend on time\n")
+    w("```bash")
+    w("psql -d smartpark -f db/tests/lifecycle_tests.sql")
+    w("```\n")
+    w("A lapsed hold, a stay over 24 hours, a live pass and an expired pass,")
+    w("driven through the real gate functions inside one transaction that is")
+    w("rolled back.\n")
+    w("| Test | Result | What the database did |")
+    w("|---|---|---|")
+    cur = ""
+    for line in r["life"].splitlines():
+        m = re.match(r"^LIFECYCLE (\d+)\s+(.*)$", line.strip())
+        if m:
+            cur = f"{m.group(1)}. {m.group(2)}"
+            continue
+        m = re.match(r"^\s*(PASS|FAIL)\s*\|\s*(.+)$", line)
+        if m:
+            w(f"| {cur} | **{m.group(1)}** | {m.group(2).strip()} |")
+            cur = "″"
+    w("")
+
+    # ------------------------------------------------------------ pytest
+    w("---\n")
+    w("## 3c. API tests (pytest)\n")
+    w("```bash")
+    w("SMARTPARK_DATABASE_URL=postgresql:///smartpark_test ./.venv/bin/pytest -q")
+    w("```\n")
+    w("Run in-process against a separate `smartpark_test` database built from")
+    w("the same migrations.\n")
+    w("| Test | Result |")
+    w("|---|---|")
+    for name, res in re.findall(r"::(test_\w+) (PASSED|FAILED)", r["py"]):
+        w(f"| `{name}` | {res} |")
+    w("")
+
     # ------------------------------------------------------------ section 4
     w("---\n")
     w("## 4. Validation and error handling\n")
@@ -230,7 +296,7 @@ def build(ct, rls, e2e):
     w("`api/errors.py`, keyed on the PostgreSQL constraint name.\n")
     w("| Where | Bad input | Caught by | Message shown to the user |")
     w("|---|---|---|---|")
-    for r in [
+    for row in [
         ("Gate — arrival", "`HELLO` as a registration", "`ck_vehicle_plate_shape`",
          "That does not look like a valid registration number. Use the format TS09AB1234."),
         ("Gate — arrival", "A plate not on file", "`fn_gate_entry` RAISE, SQLSTATE `no_data_found`",
@@ -251,8 +317,8 @@ def build(ct, rls, e2e):
          "This vehicle already holds a pass covering those dates at this facility."),
         ("Billing", "Payment of zero or less", "`ck_payment_amount_positive`",
          "A payment must be greater than zero."),
-        ("Billing", "Payment exceeding the balance", "client-side check before submit",
-         "That is more than the ₹236.00 outstanding."),
+        ("Billing", "Payment exceeding the balance", "`trg_payment_within_balance`",
+         "That is more than the ₹236.00 still owed on this bill."),
         ("Customers", "Phone that is not ten digits", "`ck_customer_phone_shape`",
          "Enter a 10 digit phone number with no spaces or country code."),
         ("Customers", "Registration already on file", "`vehicle_plate_number_key`",
@@ -271,66 +337,42 @@ def build(ct, rls, e2e):
         ("Any screen", "API not running", "fetch throws",
          "Cannot reach the server. Check that the API is running."),
     ]:
-        w("| " + " | ".join(r) + " |")
+        w("| " + " | ".join(row) + " |")
     w("")
 
     # ------------------------------------------------------------ section 5
     w("---\n")
-    w("## 5. Interface checks\n")
-    w("| Check | Method | Result |")
-    w("|---|---|---|")
-    w("| Console and network | Every page loaded, console and network log read | No errors, no failed requests |")
-    w("| Response time | All API endpoints timed | Dashboard 162 ms, slot map 24 ms, billing 214 ms, revenue 274 ms — inside the 400 ms Doherty threshold |")
-    w("| Responsive 1280 px | Browser at 1280×900 | Two-column dashboard, full floor map |")
-    w("| Responsive 768 px | Browser at 768×1024 | Sidebar collapses to a menu; `documentElement.scrollWidth === innerWidth`, so no horizontal scroll |")
-    w("| Responsive 375 px | Browser at 375×812 | Four bays across, state words legible; no horizontal scroll |")
-    w("| Reduced motion | `motion.js` re-imported with the preference stubbed, every helper asserted | All honour it: entrance lands at final state, list reveals at once, hover/tap binds no listeners, counters write the final value immediately, slot flash is a no-op |")
-    w("| Colour is never the only cue | Inspected every state indicator | Each bay carries a word, an icon and a spine; out-of-service adds a 45° hatch; badge markers differ in shape (circle / square / diamond) |")
-    w("| Keyboard | Tabbed through forms and the modal | Visible focus ring in `--accent`; modal traps focus, Escape closes, focus returns to the trigger |")
-    w("| Design tokens | `grep -c '#[0-9A-Fa-f]\\{6\\}' web/css/app.css` | **0** — every colour in every component is a token |")
-    w("")
-
-    # ------------------------------------------------------------ section 6
-    w("---\n")
-    w("## 6. Contrast measurements\n")
-    w("Computed, not eyeballed. `--ink-muted` on `--canvas` is the pairing the")
-    w("brief flags as most likely to fail; it passes at 5.17:1.\n")
-    w("| Pairing | Ratio | AA normal (4.5) | AA large (3.0) |")
-    w("|---|--:|:--:|:--:|")
-    for row in [
-        ("`--ink` on `--canvas`", "13.70", "PASS", "PASS"),
-        ("`--ink` on `--surface`", "14.82", "PASS", "PASS"),
-        ("**`--ink-muted` on `--canvas`**", "**5.17**", "**PASS**", "PASS"),
-        ("`--ink-muted` on `--surface`", "5.59", "PASS", "PASS"),
-        ("`--ink-muted` on `--surface-sunk`", "4.86", "PASS", "PASS"),
-        ("`--accent-ink` on `--canvas`", "4.52", "PASS", "PASS"),
-        ("white on `--accent-solid` (buttons)", "4.58", "PASS", "PASS"),
-        ("`--state-free-ink` on `--surface`", "4.88", "PASS", "PASS"),
-        ("`--state-held-ink` on `--surface`", "4.90", "PASS", "PASS"),
-        ("`--state-full-ink` on `--surface`", "4.87", "PASS", "PASS"),
-        ("`--state-off-ink` on `--surface`", "4.95", "PASS", "PASS"),
-        ("`--accent` **fill** on `--surface`", "3.84", "n/a — fill", "PASS"),
-        ("`--state-free` **fill** on `--surface`", "4.02", "n/a — fill", "PASS"),
-        ("`--ink-subtle` on `--canvas`", "2.92", "FAIL — see note", "FAIL"),
-    ]:
-        w("| " + " | ".join(row) + " |")
-    w("")
-    w("**On the two that do not meet AA for normal text.**\n")
-    w("The brief specifies `--accent: #3F8F84` and the four state colours as")
-    w("*fills*. White text on `#3F8F84` measures 3.84:1 — fine for a swatch or a")
-    w("3 px spine, short of AA for a button label. Rather than change the brand")
-    w("colour, `tokens.css` adds text-safe counterparts (`--accent-solid`,")
-    w("`--accent-ink`, `--state-*-ink`), each the same hue darkened until it")
-    w("clears 4.5:1. Fills keep the specified values; anything carrying words")
-    w("uses the darkened one.\n")
-    w("`--ink-subtle` at 2.92:1 is **decoration only** — hairlines, the aisle")
-    w("label on the floor plan, disabled glyphs. It is documented as such in")
-    w("`web/css/tokens.css` and never carries text a user must read.\n")
+    w("## 5. Interface checks (Chrome via Playwright, 1440×900)\n")
+    w("### Every page loads cleanly\n")
+    w("```bash")
+    w("./.venv/bin/python tests/page_smoke.py")
+    w("```\n")
+    w("```")
+    for line in r["pages"].splitlines():
+        if line.strip():
+            w(line.rstrip())
+    w("```\n")
+    w("### Components: keyboard, dialogs, tabs, reduced motion\n")
+    w("```bash")
+    w("./.venv/bin/python tests/a11y_components.py")
+    w("```\n")
+    w("```")
+    for line in r["comp"].splitlines():
+        if line.strip():
+            w(line.rstrip())
+    w("```\n")
+    w("### Text contrast against WCAG AA\n")
+    w("Every visible text element on every page, foreground against its")
+    w("actual composited background.\n")
+    w("```")
+    for line in r["contr"].splitlines():
+        if "below AA" in line:
+            w(line.rstrip())
+    w("```\n")
     return "\n".join(L)
 
 
 if __name__ == "__main__":
-    ct, rls, e2e = run_suites()
     out = ROOT / "docs" / "TESTING.md"
-    out.write_text(build(ct, rls, e2e))
+    out.write_text(build(run_suites()))
     print(f"wrote {out} ({len(out.read_text().splitlines())} lines)")

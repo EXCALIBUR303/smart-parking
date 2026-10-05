@@ -173,8 +173,12 @@ function summarise(a) {
   return Object.entries(a.changes || {}).map(([k, v]) =>
     `${k}: ${show(v.from)} → ${show(v.to)}`).join(', ');
 }
+// Timestamps arrive as ISO strings from to_jsonb(); show them as the rest of
+// the app does rather than as 2026-10-05T16:10:37.546915+05:30.
+const ISO_TS = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/;
 const show = (v) => v === null || v === undefined ? '—'
-  : typeof v === 'object' ? JSON.stringify(v) : String(v);
+  : typeof v === 'object' ? JSON.stringify(v)
+  : typeof v === 'string' && ISO_TS.test(v) ? dateTime(v) : String(v);
 
 function showChange(a) {
   const entries = Object.entries(a.changes || {});

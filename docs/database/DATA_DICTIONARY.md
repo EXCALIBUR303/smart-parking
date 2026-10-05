@@ -7,7 +7,7 @@ reads `information_schema` and `pg_catalog`. It is a report on the database
 that exists, not a description maintained by hand — regenerate it after any
 migration and it cannot drift.
 
-PostgreSQL objects: **16 tables**, **30 CHECK constraints**, **31 foreign keys**, **3 exclusion constraints**, **55 indexes**, **6 enumerated types**.
+PostgreSQL objects: **17 tables**, **33 CHECK constraints**, **36 foreign keys**, **3 exclusion constraints**, **59 indexes**, **6 enumerated types**.
 
 ---
 
@@ -57,11 +57,44 @@ Login identity and role. Drives every row-level security policy.
 **RLS policies:** `p_user_admin_all` (ALL), `p_user_self_read` (SELECT)
 
 
+### `audit_log`
+
+Append-only change history written by trigger. changes holds the full row for INSERT/DELETE and {column: {from, to}} for UPDATE.
+
+*Rows in the seeded database: 66. Row-level security: not enabled.*
+
+| # | Column | Type | Null | Default | Description |
+|--:|---|---|---|---|---|
+| 1 | `audit_id` | `bigint` | NOT NULL | — | Surrogate key, in insertion order. |
+| 2 | `occurred_at` | `timestamp with time zone` | NOT NULL | `now()` | When the change was committed by the statement that made it. |
+| 3 | `actor_user_id` | `bigint` | nullable | — | The signed-in user (app.current_user_id) who made the change. NULL for a direct database session; SET NULL if the user is later removed, so history survives. |
+| 4 | `actor_role` | `user_role` | nullable | — | Role of the actor at the time, kept even if the user's role changes later. |
+| 5 | `table_name` | `text` | NOT NULL | — | Table the changed row belongs to. |
+| 6 | `row_id` | `bigint` | NOT NULL | — | Primary key of the changed row in table_name. |
+| 7 | `action` | `text` | NOT NULL | — | INSERT, UPDATE or DELETE. |
+| 8 | `changes` | `jsonb` | NOT NULL | — | INSERT/DELETE: the whole row. UPDATE: only the columns that changed, as {column: {from, to}}. |
+
+**Constraints**
+
+| Name | Kind | Definition | Note |
+|---|---|---|---|
+| `audit_log_pkey` | PRIMARY KEY | `PRIMARY KEY (audit_id)` |  |
+| `fk_audit_actor` | FOREIGN KEY | `FOREIGN KEY (actor_user_id) REFERENCES app_user(user_id) ON UPDATE CASCADE ON DELETE SET NULL` |  |
+| `ck_audit_action` | CHECK | `CHECK ((action = ANY (ARRAY['INSERT'::text, 'UPDATE'::text, 'DELETE'::text])))` | The three DML verbs only. |
+
+**Indexes** (beyond those backing the constraints above)
+
+| Name | Definition | Serves |
+|---|---|---|
+| `ix_audit_occurred` | `public.audit_log USING btree (occurred_at DESC)` |  |
+| `ix_audit_row` | `public.audit_log USING btree (table_name, row_id)` |  |
+
+
 ### `bill`
 
 One bill per completed session. base_amount is overwritten from fn_calculate_charge by trigger; total_amount is generated.
 
-*Rows in the seeded database: 3203. Row-level security: enabled.*
+*Rows in the seeded database: 1594. Row-level security: enabled.*
 
 | # | Column | Type | Null | Default | Description |
 |--:|---|---|---|---|---|
@@ -100,7 +133,7 @@ One bill per completed session. base_amount is overwritten from fn_calculate_cha
 
 A parking customer. user_id is NULL for walk-ins recorded at the gate.
 
-*Rows in the seeded database: 32. Row-level security: enabled.*
+*Rows in the seeded database: 34. Row-level security: enabled.*
 
 | # | Column | Type | Null | Default | Description |
 |--:|---|---|---|---|---|
@@ -120,6 +153,7 @@ A parking customer. user_id is NULL for walk-ins recorded at the gate.
 | `customer_phone_key` | UNIQUE | `UNIQUE (phone)` |  |
 | `customer_user_id_key` | UNIQUE | `UNIQUE (user_id)` |  |
 | `fk_customer_user` | FOREIGN KEY | `FOREIGN KEY (user_id) REFERENCES app_user(user_id) ON UPDATE CASCADE ON DELETE SET NULL` |  |
+| `ck_customer_email_shape` | CHECK | `CHECK (((email IS NULL) OR (email ~ '^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$'::citext)))` | Basic shape check: something@something.tld, no spaces. |
 | `ck_customer_name_not_blank` | CHECK | `CHECK ((length(btrim(full_name)) > 0))` |  |
 | `ck_customer_phone_shape` | CHECK | `CHECK ((phone ~ '^[0-9]{10}$'::text))` |  |
 
@@ -217,6 +251,7 @@ A purchased pass. Active-ness is derived from the date window and cancelled_at, 
 | `fk_pass_facility` | FOREIGN KEY | `FOREIGN KEY (facility_id) REFERENCES facility(facility_id) ON UPDATE CASCADE ON DELETE CASCADE` |  |
 | `fk_pass_type` | FOREIGN KEY | `FOREIGN KEY (pass_type_id) REFERENCES pass_type(pass_type_id) ON UPDATE CASCADE ON DELETE RESTRICT` |  |
 | `fk_pass_vehicle` | FOREIGN KEY | `FOREIGN KEY (vehicle_id) REFERENCES vehicle(vehicle_id) ON UPDATE CASCADE ON DELETE RESTRICT` |  |
+| `fk_pass_vehicle_owner` | FOREIGN KEY | `FOREIGN KEY (vehicle_id, customer_id) REFERENCES vehicle(vehicle_id, customer_id)` | Ownership: a pass can only cover the buying customer's own vehicle. |
 | `ck_pass_price` | CHECK | `CHECK ((price_paid >= (0)::numeric))` |  |
 | `ck_pass_window` | CHECK | `CHECK ((valid_to > valid_from))` |  |
 | `ex_pass_no_overlap` | EXCLUDE | `EXCLUDE USING gist (vehicle_id WITH =, facility_id WITH =, tstzrange(valid_from, valid_to) WITH &&) WHERE ((cancelled_at IS NULL))` |  |
@@ -234,7 +269,7 @@ A purchased pass. Active-ness is derived from the date window and cancelled_at, 
 
 A vehicle occupying a slot. Active when exit_time IS NULL; there is deliberately no status column.
 
-*Rows in the seeded database: 3242. Row-level security: enabled.*
+*Rows in the seeded database: 1609. Row-level security: enabled.*
 
 | # | Column | Type | Null | Default | Description |
 |--:|---|---|---|---|---|
@@ -262,7 +297,7 @@ A vehicle occupying a slot. Active when exit_time IS NULL; there is deliberately
 | `fk_session_pass` | FOREIGN KEY | `FOREIGN KEY (pass_id) REFERENCES parking_pass(pass_id) ON UPDATE CASCADE ON DELETE SET NULL` |  |
 | `fk_session_reservation` | FOREIGN KEY | `FOREIGN KEY (reservation_id) REFERENCES reservation(reservation_id) ON UPDATE CASCADE ON DELETE SET NULL` |  |
 | `fk_session_slot_type_match` | FOREIGN KEY | `FOREIGN KEY (slot_id, vehicle_type_id) REFERENCES slot(slot_id, vehicle_type_id) ON UPDATE CASCADE ON DELETE RESTRICT` | BUSINESS RULE 2: composite FK making a car-in-bike-bay session structurally impossible. |
-| `fk_session_vehicle_type_match` | FOREIGN KEY | `FOREIGN KEY (vehicle_id, vehicle_type_id) REFERENCES vehicle(vehicle_id, vehicle_type_id) ON UPDATE CASCADE ON DELETE RESTRICT` |  |
+| `fk_session_vehicle_type_match` | FOREIGN KEY | `FOREIGN KEY (vehicle_id, vehicle_type_id) REFERENCES vehicle(vehicle_id, vehicle_type_id) ON UPDATE CASCADE ON DELETE RESTRICT` | Pins parking_session.vehicle_type_id to the vehicle's real type, so the copied column cannot drift. |
 | `ck_session_exit_after_entry` | CHECK | `CHECK (((exit_time IS NULL) OR (exit_time > entry_time)))` | BUSINESS RULE 3: exit must be strictly later than entry. |
 | `ck_session_ticket_shape` | CHECK | `CHECK ((ticket_no ~ '^TK-[0-9A-Z]{6,12}$'::text))` |  |
 
@@ -309,7 +344,7 @@ Sellable pass products. A pass is an instance of a pass_type bought by a custome
 
 A recorded receipt against a bill. Several payments may settle one bill (partly_paid). No payment credentials are stored.
 
-*Rows in the seeded database: 2770. Row-level security: enabled.*
+*Rows in the seeded database: 1378. Row-level security: enabled.*
 
 | # | Column | Type | Null | Default | Description |
 |--:|---|---|---|---|---|
@@ -344,7 +379,7 @@ A recorded receipt against a bill. Several payments may settle one bill (partly_
 
 A slot held for a future arrival. Stale holds are expired by fn_expire_stale_reservations.
 
-*Rows in the seeded database: 65. Row-level security: enabled.*
+*Rows in the seeded database: 35. Row-level security: enabled.*
 
 | # | Column | Type | Null | Default | Description |
 |--:|---|---|---|---|---|
@@ -356,6 +391,7 @@ A slot held for a future arrival. Stale holds are expired by fn_expire_stale_res
 | 6 | `reserved_until` | `timestamp with time zone` | NOT NULL | — | End of the hold. Must be later than reserved_from (business rule 4). |
 | 7 | `status` | `reservation_status` | NOT NULL | `'held'::reservation_status` | held and confirmed block the bay and participate in ex_reservation_no_overlap; expired, cancelled and fulfilled are history and do not. |
 | 8 | `created_at` | `timestamp with time zone` | NOT NULL | `now()` |  |
+| 9 | `vehicle_type_id` | `bigint` | NOT NULL | — | Join column for the two type-match foreign keys; forced equal to both the slot's and the vehicle's type. |
 
 **Constraints**
 
@@ -364,7 +400,10 @@ A slot held for a future arrival. Stale holds are expired by fn_expire_stale_res
 | `reservation_pkey` | PRIMARY KEY | `PRIMARY KEY (reservation_id)` |  |
 | `fk_reservation_customer` | FOREIGN KEY | `FOREIGN KEY (customer_id) REFERENCES customer(customer_id) ON UPDATE CASCADE ON DELETE RESTRICT` |  |
 | `fk_reservation_slot` | FOREIGN KEY | `FOREIGN KEY (slot_id) REFERENCES slot(slot_id) ON UPDATE CASCADE ON DELETE RESTRICT` |  |
+| `fk_reservation_slot_type_match` | FOREIGN KEY | `FOREIGN KEY (slot_id, vehicle_type_id) REFERENCES slot(slot_id, vehicle_type_id)` | BUSINESS RULE 2 at booking time: the bay's vehicle type must equal reservation.vehicle_type_id. |
 | `fk_reservation_vehicle` | FOREIGN KEY | `FOREIGN KEY (vehicle_id) REFERENCES vehicle(vehicle_id) ON UPDATE CASCADE ON DELETE RESTRICT` |  |
+| `fk_reservation_vehicle_owner` | FOREIGN KEY | `FOREIGN KEY (vehicle_id, customer_id) REFERENCES vehicle(vehicle_id, customer_id)` | Ownership: a customer can only book with their own vehicle. Composite FK onto vehicle(vehicle_id, customer_id). |
+| `fk_reservation_vehicle_type_match` | FOREIGN KEY | `FOREIGN KEY (vehicle_id, vehicle_type_id) REFERENCES vehicle(vehicle_id, vehicle_type_id)` | Pins reservation.vehicle_type_id to the vehicle's real type, so the copied column cannot drift. |
 | `ck_reservation_window` | CHECK | `CHECK ((reserved_until > reserved_from))` |  |
 | `ex_reservation_no_overlap` | EXCLUDE | `EXCLUDE USING gist (slot_id WITH =, tstzrange(reserved_from, reserved_until) WITH &&) WHERE ((status = ANY (ARRAY['held'::reservation_status, 'conf…` | BUSINESS RULE 4: no two live reservations may overlap on one slot. |
 
@@ -394,6 +433,7 @@ One parking space. Occupancy is NOT stored here - it is derived from parking_ses
 | 6 | `grid_row` | `smallint` | nullable | — | Position on the floor plan, so the map renders as a plan rather than a list. |
 | 7 | `grid_col` | `smallint` | nullable | — | Position on the floor plan. NULL where a bay has no mapped position. |
 | 8 | `created_at` | `timestamp with time zone` | NOT NULL | `now()` |  |
+| 9 | `service_note` | `text` | nullable | — | Why the bay is out of service. Only allowed while is_active is FALSE. |
 
 **Constraints**
 
@@ -405,6 +445,7 @@ One parking space. Occupancy is NOT stored here - it is derived from parking_ses
 | `fk_slot_vehicle_type` | FOREIGN KEY | `FOREIGN KEY (vehicle_type_id) REFERENCES vehicle_type(vehicle_type_id) ON UPDATE CASCADE ON DELETE RESTRICT` |  |
 | `fk_slot_zone` | FOREIGN KEY | `FOREIGN KEY (zone_id) REFERENCES zone(zone_id) ON UPDATE CASCADE ON DELETE CASCADE` |  |
 | `ck_slot_code_shape` | CHECK | `CHECK ((code ~ '^[A-Z0-9-]{2,16}$'::text))` |  |
+| `ck_slot_note_only_when_out` | CHECK | `CHECK (((service_note IS NULL) OR ((NOT is_active) AND ((char_length(service_note) >= 1) AND (char_length(service_note) <= 200)))))` | A service note describes why a bay is out of service, so it may exist only while is_active is FALSE. |
 
 **Indexes** (beyond those backing the constraints above)
 
@@ -451,7 +492,7 @@ Versioned price list. Superseded rows are closed with effective_to so historical
 
 A customer vehicle. plate_number is UNIQUE and is the operator search key.
 
-*Rows in the seeded database: 47. Row-level security: enabled.*
+*Rows in the seeded database: 49. Row-level security: enabled.*
 
 | # | Column | Type | Null | Default | Description |
 |--:|---|---|---|---|---|
@@ -469,6 +510,7 @@ A customer vehicle. plate_number is UNIQUE and is the operator search key.
 | Name | Kind | Definition | Note |
 |---|---|---|---|
 | `vehicle_pkey` | PRIMARY KEY | `PRIMARY KEY (vehicle_id)` |  |
+| `uq_vehicle_id_customer` | UNIQUE | `UNIQUE (vehicle_id, customer_id)` |  |
 | `uq_vehicle_id_vehicle_type` | UNIQUE | `UNIQUE (vehicle_id, vehicle_type_id)` |  |
 | `vehicle_plate_number_key` | UNIQUE | `UNIQUE (plate_number)` |  |
 | `fk_vehicle_customer` | FOREIGN KEY | `FOREIGN KEY (customer_id) REFERENCES customer(customer_id) ON UPDATE CASCADE ON DELETE RESTRICT` |  |
@@ -512,7 +554,7 @@ Vehicle categories. Referenced by slot, vehicle, tariff and pass_type.
 
 Logged infringements: overstay, wrong slot type, no valid pass, unpaid exit, reservation no-show.
 
-*Rows in the seeded database: 62. Row-level security: enabled.*
+*Rows in the seeded database: 72. Row-level security: enabled.*
 
 | # | Column | Type | Null | Default | Description |
 |--:|---|---|---|---|---|
@@ -586,6 +628,7 @@ A block of slots on one floor, e.g. Zone A. Used for aisle grouping in the slot 
 | `v_free_slots` | yes | Report: free slots. Subset of v_current_occupancy. |
 | `v_pass_usage` | yes | Report: pass usage. LATERAL subquery aggregating the sessions each pass covered. |
 | `v_peak_hours` | yes | Report: peak hours. GROUP BY hour with a RANK() window over the aggregate. |
+| `v_recent_activity` | yes | Report: every gate, payment, booking and violation event as one stream (UNION ALL of five branches). |
 | `v_revenue_daily` | yes | Report: daily revenue. Separates billed from collected so the receivable is visible. |
 | `v_session_duration` | yes | Report: session duration with CASE bucketing and a LEFT JOIN to bill. |
 | `v_violations` | yes | Report: violations, joined out to vehicle, customer, slot and session. |
@@ -602,6 +645,7 @@ becomes a way around the policies it appears to respect.
 |---|---|---|
 | `fn_allocate_slot(p_facility_id bigint, p_vehicle_type_id bigint, p_at timestamp with time zone)` | DEFINER | Picks the nearest free slot and row-locks it with SELECT ... FOR UPDATE SKIP LOCKED. Returns NULL when full. |
 | `fn_applicable_tariff(p_session_id bigint)` | INVOKER |  |
+| `fn_audit_row()` | DEFINER |  |
 | `fn_bill_enforce_amounts()` | INVOKER | Overwrites any client-supplied bill amount with the value from fn_calculate_charge. |
 | `fn_calculate_charge(p_session_id bigint)` | INVOKER | BUSINESS RULE 5: the only place a parking charge is computed. Reads the tariff in force at entry_time. |
 | `fn_current_customer_id()` | INVOKER |  |
@@ -612,3 +656,6 @@ becomes a way around the policies it appears to respect.
 | `fn_gate_entry(p_plate text, p_facility_id bigint, p_operator_id bigint)` | DEFINER | Atomic arrival: resolve vehicle, honour reservation or allocate a locked slot, attach pass, open session. |
 | `fn_gate_exit(p_lookup text, p_operator_id bigint)` | DEFINER | Atomic departure: lock session, stamp exit, raise bill from fn_calculate_charge, log overstay. |
 | `fn_payment_sync_bill_status()` | INVOKER |  |
+| `fn_payment_within_balance()` | INVOKER | Refuses a payment that would take a bill past its total. Locks the bill row so concurrent payments serialise. |
+| `fn_reservation_prepare()` | INVOKER |  |
+| `fn_set_slot_service(p_slot_id bigint, p_in_service boolean, p_note text)` | INVOKER | Take a bay out of service or return it. Refuses an occupied or held bay; operators are limited to their facility. |
