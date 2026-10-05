@@ -98,7 +98,8 @@ PostgreSQL
 
 17 tables · 8 views · 16 PL/pgSQL functions · 14 triggers · 26 RLS policies on
 9 tables · 59 indexes · 36 foreign keys · 33 CHECK, 17 UNIQUE and 3 EXCLUDE
-constraints. Built by 18 numbered migrations in `db/migrations/`.
+constraints. Built by 19 numbered migrations in `db/migrations/`. Every
+table holds at least five sample rows.
 
 | Business rule | Enforced by |
 |---|---|
@@ -212,7 +213,7 @@ dropdb --if-exists smartpark && createdb smartpark
 
 ### Step 5 — build the schema and load the sample data
 
-This runs all eighteen migration scripts in order: schema, functions,
+This runs all nineteen migration scripts in order: schema, functions,
 views, indexes, security, then the sample data. It takes a few seconds.
 
 ```bash
@@ -381,7 +382,7 @@ All 25 screens are in [`docs/screens/`](docs/screens/).
 ```
 smart-parking/
 ├── db/
-│   ├── migrations/          the whole database, 18 numbered scripts, applied in order
+│   ├── migrations/          the whole database, 19 numbered scripts, applied in order
 │   │   ├── 001_extensions_roles_enums.sql
 │   │   ├── 002_core_tables.sql
 │   │   ├── 003_slot_vehicle_tariff.sql
@@ -399,7 +400,8 @@ smart-parking/
 │   │   ├── 015_customer_email_shape.sql
 │   │   ├── 016_payment_within_balance.sql
 │   │   ├── 017_zero_bill_is_paid.sql
-│   │   └── 018_audit_and_rule_comments.sql
+│   │   ├── 018_audit_and_rule_comments.sql
+│   │   └── 019_planned_facilities.sql     ← 3 planned sites, inactive
 │   ├── scripts/             refresh_demo_history.sql (moves demo data up to today)
 │   └── tests/               constraint, lifecycle and RLS tests
 ├── api/                     Python (FastAPI) application layer

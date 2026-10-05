@@ -61,7 +61,7 @@ Login identity and role. Drives every row-level security policy.
 
 Append-only change history written by trigger. changes holds the full row for INSERT/DELETE and {column: {from, to}} for UPDATE.
 
-*Rows in the seeded database: 66. Row-level security: not enabled.*
+*Rows in the seeded database: 11. Row-level security: not enabled.*
 
 | # | Column | Type | Null | Default | Description |
 |--:|---|---|---|---|---|
@@ -94,7 +94,7 @@ Append-only change history written by trigger. changes holds the full row for IN
 
 One bill per completed session. base_amount is overwritten from fn_calculate_charge by trigger; total_amount is generated.
 
-*Rows in the seeded database: 1594. Row-level security: enabled.*
+*Rows in the seeded database: 1611. Row-level security: enabled.*
 
 | # | Column | Type | Null | Default | Description |
 |--:|---|---|---|---|---|
@@ -133,7 +133,7 @@ One bill per completed session. base_amount is overwritten from fn_calculate_cha
 
 A parking customer. user_id is NULL for walk-ins recorded at the gate.
 
-*Rows in the seeded database: 34. Row-level security: enabled.*
+*Rows in the seeded database: 31. Row-level security: enabled.*
 
 | # | Column | Type | Null | Default | Description |
 |--:|---|---|---|---|---|
@@ -170,7 +170,7 @@ A parking customer. user_id is NULL for walk-ins recorded at the gate.
 
 A parking building. Owns floors, tariffs and operators.
 
-*Rows in the seeded database: 2. Row-level security: not enabled.*
+*Rows in the seeded database: 5. Row-level security: not enabled.*
 
 | # | Column | Type | Null | Default | Description |
 |--:|---|---|---|---|---|
@@ -269,7 +269,7 @@ A purchased pass. Active-ness is derived from the date window and cancelled_at, 
 
 A vehicle occupying a slot. Active when exit_time IS NULL; there is deliberately no status column.
 
-*Rows in the seeded database: 1609. Row-level security: enabled.*
+*Rows in the seeded database: 1629. Row-level security: enabled.*
 
 | # | Column | Type | Null | Default | Description |
 |--:|---|---|---|---|---|
@@ -344,7 +344,7 @@ Sellable pass products. A pass is an instance of a pass_type bought by a custome
 
 A recorded receipt against a bill. Several payments may settle one bill (partly_paid). No payment credentials are stored.
 
-*Rows in the seeded database: 1378. Row-level security: enabled.*
+*Rows in the seeded database: 1398. Row-level security: enabled.*
 
 | # | Column | Type | Null | Default | Description |
 |--:|---|---|---|---|---|
@@ -379,7 +379,7 @@ A recorded receipt against a bill. Several payments may settle one bill (partly_
 
 A slot held for a future arrival. Stale holds are expired by fn_expire_stale_reservations.
 
-*Rows in the seeded database: 35. Row-level security: enabled.*
+*Rows in the seeded database: 32. Row-level security: enabled.*
 
 | # | Column | Type | Null | Default | Description |
 |--:|---|---|---|---|---|
@@ -492,7 +492,7 @@ Versioned price list. Superseded rows are closed with effective_to so historical
 
 A customer vehicle. plate_number is UNIQUE and is the operator search key.
 
-*Rows in the seeded database: 49. Row-level security: enabled.*
+*Rows in the seeded database: 46. Row-level security: enabled.*
 
 | # | Column | Type | Null | Default | Description |
 |--:|---|---|---|---|---|
@@ -554,7 +554,7 @@ Vehicle categories. Referenced by slot, vehicle, tariff and pass_type.
 
 Logged infringements: overstay, wrong slot type, no valid pass, unpaid exit, reservation no-show.
 
-*Rows in the seeded database: 72. Row-level security: enabled.*
+*Rows in the seeded database: 52. Row-level security: enabled.*
 
 | # | Column | Type | Null | Default | Description |
 |--:|---|---|---|---|---|

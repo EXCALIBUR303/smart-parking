@@ -9,7 +9,7 @@ Quick orientation:
 
 | Where | What is in it |
 |---|---|
-| `db/migrations/` | The whole database, 18 numbered scripts, applied in order |
+| `db/migrations/` | The whole database, 19 numbered scripts, applied in order |
 | `db/tests/` | Constraint, lifecycle and RLS tests, runnable with `psql -f` |
 | `api/` | Python (FastAPI) application layer |
 | `web/` | The interface |
@@ -96,7 +96,7 @@ cost ₹1.00. The row is accepted and the trigger silently replaces the figure:
 
 | | Seeded |
 |---|--:|
-| Facilities / floors / zones | 2 / 5 / 10 |
+| Facilities (2 open, 3 planned) / floors / zones | 5 / 5 / 10 |
 | Slots (5 vehicle types, 1 out of service) | 134 |
 | Customers (3 registered but never parked) | 31 |
 | Vehicles | 46 |
@@ -228,7 +228,7 @@ unprompted.
 | Deliverable | Where |
 |---|---|
 | Source code | `api/`, `web/` |
-| Database script | `db/migrations/001` … `018`, applied in order (`./setup.sh`) |
+| Database script | `db/migrations/001` … `019`, applied in order (`./setup.sh`) |
 | Test data | `010_seed.sql`, `011_seed_history.sql` |
 | Output screens | `docs/screens/` — 25 PNGs at 1440 × 900 |
 | Testing evidence | [`docs/TESTING.md`](TESTING.md) |

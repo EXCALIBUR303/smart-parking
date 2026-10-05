@@ -46,6 +46,7 @@ Nothing was deleted. The Firebase prototype is archived intact in
 | `016_payment_within_balance.sql` | `trg_payment_within_balance`: no payment beyond what is owed, no payment on a waived bill |
 | `017_zero_bill_is_paid.sql` | A ₹0 bill (free period or pass) is settled automatically instead of sitting as "unpaid" |
 | `018_audit_and_rule_comments.sql` | Comments for the objects added in 013–016, for the data dictionary |
+| `019_planned_facilities.sql` | Three planned sites stored inactive, so every table holds at least five rows; screens list active sites only |
 
 All are idempotent enough to replay on a fresh database and are applied in
 filename order by `setup.sh`.
