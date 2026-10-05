@@ -1,0 +1,27 @@
+# Secrets and local environment
+.env*
+!.env.example
+.vercel
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+
+# Backups and scratch output
+*.bak
+*.orig
+*.log
+
+# Internal AI-session notes, not part of the project
+OPUS_MASTER_PROMPT.md
+MODEL_HANDOFF.md
+
+# The retired Firebase build's web config carries a project API key
+legacy-firebase/js/firebase-config.js

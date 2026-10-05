@@ -1,0 +1,12 @@
+# Not needed in the deployed function/site — keeps the upload small and fast.
+.venv/
+db/
+docs/
+tests/
+legacy-firebase/
+MODEL_HANDOFF.md
+OPUS_MASTER_PROMPT.md
+*.md
+__pycache__/
+*.pyc
+.DS_Store

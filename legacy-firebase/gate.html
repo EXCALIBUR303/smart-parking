@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gate Entry/Exit - SmartPark</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Poppins:wght@600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link rel="stylesheet" href="css/styles.css">
+  <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/pages.css">
+</head>
+<body>
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <div class="logo">
+        <i class="fas fa-car-side"></i>
+        <span>SmartPark</span>
+      </div>
+    </div>
+    <nav class="sidebar-nav">
+      <a href="dashboard.html" class="nav-link" data-page="dashboard">
+        <i class="fas fa-chart-pie"></i><span>Dashboard</span>
+      </a>
+      <a href="slots.html" class="nav-link" data-page="slots">
+        <i class="fas fa-th-large"></i><span>Parking Slots</span>
+      </a>
+      <a href="gate.html" class="nav-link active" data-page="gate">
+        <i class="fas fa-dungeon"></i><span>Gate Entry/Exit</span>
+      </a>
+      <a href="reservations.html" class="nav-link" data-page="reservations">
+        <i class="fas fa-calendar-check"></i><span>Reservations</span>
+      </a>
+      <a href="passes.html" class="nav-link" data-page="passes">
+        <i class="fas fa-id-card"></i><span>Passes</span>
+      </a>
+      <a href="billing.html" class="nav-link" data-page="billing">
+        <i class="fas fa-file-invoice-dollar"></i><span>Billing</span>
+      </a>
+      <a href="reports.html" class="nav-link" data-page="reports">
+        <i class="fas fa-chart-bar"></i><span>Reports</span>
+      </a>
+      <a href="customers.html" class="nav-link" data-page="customers">
+        <i class="fas fa-users"></i><span>Customers</span>
+      </a>
+      <a href="settings.html" class="nav-link" data-page="settings">
+        <i class="fas fa-cog"></i><span>Settings</span>
+      </a>
+    </nav>
+    <div class="sidebar-footer">
+      <button class="nav-link" id="logoutBtn">
+        <i class="fas fa-sign-out-alt"></i><span>Logout</span>
+      </button>
+    </div>
+  </aside>
+
+  <main class="main-content">
+    <header class="top-header">
+      <button class="menu-toggle" id="menuToggle"><i class="fas fa-bars"></i></button>
+      <div class="header-title">
+        <h1>Gate Entry/Exit</h1>
+        <p class="header-subtitle">Manage vehicle flow and billing</p>
+      </div>
+      <div class="header-actions">
+        <div class="search-box">
+          <i class="fas fa-search"></i>
+          <input type="text" placeholder="Search...">
+        </div>
+        <div class="user-profile">
+          <div class="avatar"><i class="fas fa-user"></i></div>
+          <span class="user-name" id="userName">Admin</span>
+        </div>
+      </div>
+    </header>
+
+    <div class="page-content">
+      <div class="split-layout" style="display:flex; gap:20px; flex-wrap:wrap;">
+        
+        <!-- LEFT PANEL - ENTRY -->
+        <div class="panel entry-panel" style="flex:1; min-width:300px; background:rgba(30,41,59,0.8); padding:25px; border-radius:12px; border-top:4px solid #10B981;">
+          <h2 style="color:#10B981; margin-bottom:20px;"><i class="fas fa-arrow-right-to-bracket"></i> Vehicle Entry</h2>
+          
+          <div class="form-group" style="margin-bottom:20px;">
+            <label>Vehicle Number</label>
+            <input type="text" id="entryVehicleNo" class="form-input" style="width:100%; padding:15px; font-size:24px; font-weight:bold; text-transform:uppercase; letter-spacing:2px; border-radius:8px; background:#0F172A; color:#F1F5F9; border:1px solid rgba(148,163,184,0.1);" placeholder="MH 12 AB 1234">
+          </div>
+          
+          <div class="form-group" style="margin-bottom:20px;">
+            <label>Vehicle Type</label>
+            <div class="type-selector" style="display:flex; gap:10px; margin-top:10px;">
+              <label class="radio-card" style="flex:1; text-align:center; padding:15px; background:#0F172A; border:1px solid rgba(148,163,184,0.1); border-radius:8px; cursor:pointer;">
+                <input type="radio" name="entryType" value="car" checked style="display:none;">
+                <i class="fas fa-car" style="font-size:24px; display:block; margin-bottom:5px;"></i> Car
+              </label>
+              <label class="radio-card" style="flex:1; text-align:center; padding:15px; background:#0F172A; border:1px solid rgba(148,163,184,0.1); border-radius:8px; cursor:pointer;">
+                <input type="radio" name="entryType" value="bike" style="display:none;">
+                <i class="fas fa-motorcycle" style="font-size:24px; display:block; margin-bottom:5px;"></i> Bike
+              </label>
+              <label class="radio-card" style="flex:1; text-align:center; padding:15px; background:#0F172A; border:1px solid rgba(148,163,184,0.1); border-radius:8px; cursor:pointer;">
+                <input type="radio" name="entryType" value="truck" style="display:none;">
+                <i class="fas fa-truck" style="font-size:24px; display:block; margin-bottom:5px;"></i> Truck
+              </label>
+              <label class="radio-card" style="flex:1; text-align:center; padding:15px; background:#0F172A; border:1px solid rgba(148,163,184,0.1); border-radius:8px; cursor:pointer;">
+                <input type="radio" name="entryType" value="ev" style="display:none;">
+                <i class="fas fa-charging-station" style="font-size:24px; display:block; margin-bottom:5px;"></i> EV
+              </label>
+            </div>
+          </div>
+          
+          <div style="display:flex; gap:10px; margin-bottom:20px;">
+            <button id="btnCheckPass" class="btn" style="flex:1; padding:12px; background:#334155; color:white; border:none; border-radius:8px; cursor:pointer;">Check for Pass</button>
+            <div id="passStatus" style="flex:2; display:flex; align-items:center; padding:10px; font-size:14px;"></div>
+          </div>
+          
+          <div class="form-group" style="margin-bottom:20px; background:#0F172A; padding:15px; border-radius:8px; text-align:center;">
+            <p style="color:#94A3B8; margin-bottom:5px;">Auto-assigned Slot</p>
+            <h3 id="assignedSlot" style="font-size:28px; color:#10B981;">--</h3>
+          </div>
+          
+          <button id="btnRecordEntry" class="btn" style="width:100%; padding:15px; font-size:18px; font-weight:bold; background:linear-gradient(to right, #10B981, #059669); color:white; border:none; border-radius:8px; cursor:pointer; box-shadow:0 4px 12px rgba(16,185,129,0.3);">Record Entry</button>
+          
+          <!-- Success Ticket Overlay -->
+          <div id="ticketOverlay" style="display:none; margin-top:20px; background:linear-gradient(135deg, #1E293B, #0F172A); border:2px dashed #10B981; padding:20px; border-radius:12px; text-align:center; animation: fadeIn 0.5s;">
+            <h3 style="color:#10B981; margin-bottom:15px;">ENTRY TICKET</h3>
+            <p style="font-size:14px; color:#94A3B8; margin-bottom:5px;">Ticket No</p>
+            <h4 id="ticketNo" style="font-size:18px; margin-bottom:15px;">-</h4>
+            <div style="display:flex; justify-content:space-around; margin-bottom:15px;">
+              <div>
+                <p style="font-size:12px; color:#94A3B8;">Vehicle</p>
+                <p id="ticketVehicle" style="font-weight:bold;">-</p>
+              </div>
+              <div>
+                <p style="font-size:12px; color:#94A3B8;">Slot</p>
+                <p id="ticketSlot" style="font-weight:bold; color:#10B981;">-</p>
+              </div>
+            </div>
+            <p id="ticketTime" style="font-size:14px;"></p>
+          </div>
+        </div>
+        
+        <!-- RIGHT PANEL - EXIT -->
+        <div class="panel exit-panel" style="flex:1; min-width:300px; background:rgba(30,41,59,0.8); padding:25px; border-radius:12px; border-top:4px solid #F43F5E;">
+          <h2 style="color:#F43F5E; margin-bottom:20px;"><i class="fas fa-arrow-right-from-bracket"></i> Vehicle Exit</h2>
+          
+          <div class="form-group" style="margin-bottom:20px; display:flex; gap:10px;">
+            <input type="text" id="exitSearchInput" class="form-input" style="flex:3; padding:15px; font-size:18px; text-transform:uppercase; border-radius:8px; background:#0F172A; color:#F1F5F9; border:1px solid rgba(148,163,184,0.1);" placeholder="Ticket No / Vehicle No">
+            <button id="btnLookUp" class="btn" style="flex:1; background:#4F46E5; color:white; border:none; border-radius:8px; cursor:pointer;">Look Up</button>
+          </div>
+          
+          <div id="exitSessionDetails" style="display:none;">
+            <div style="background:#0F172A; padding:20px; border-radius:8px; margin-bottom:20px;">
+              <div style="display:flex; justify-content:space-between; margin-bottom:10px;">
+                <span style="color:#94A3B8;">Vehicle:</span>
+                <strong id="exitVehicle">-</strong>
+              </div>
+              <div style="display:flex; justify-content:space-between; margin-bottom:10px;">
+                <span style="color:#94A3B8;">Slot:</span>
+                <strong id="exitSlot">-</strong>
+              </div>
+              <div style="display:flex; justify-content:space-between; margin-bottom:10px;">
+                <span style="color:#94A3B8;">Entry Time:</span>
+                <span id="exitEntryTime">-</span>
+              </div>
+              <div style="display:flex; justify-content:space-between; border-top:1px solid rgba(148,163,184,0.1); padding-top:10px; margin-top:10px;">
+                <span style="color:#94A3B8;">Duration:</span>
+                <strong id="exitDuration" style="color:#F59E0B; font-size:18px;">00:00:00</strong>
+              </div>
+            </div>
+            
+            <div style="background:#0F172A; padding:20px; border-radius:8px; margin-bottom:20px;">
+              <h3 style="margin-bottom:15px; font-size:16px;">Bill Summary</h3>
+              <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
+                <span style="color:#94A3B8;">Base Charge (<span id="exitRate">0</span>/hr):</span>
+                <span id="exitBase">₹0</span>
+              </div>
+              <div style="display:flex; justify-content:space-between; margin-bottom:5px; color:#10B981;">
+                <span>Discount (Pass):</span>
+                <span id="exitDiscount">-₹0</span>
+              </div>
+              <div style="display:flex; justify-content:space-between; margin-bottom:10px;">
+                <span style="color:#94A3B8;">Tax (18%):</span>
+                <span id="exitTax">₹0</span>
+              </div>
+              <div style="display:flex; justify-content:space-between; border-top:1px dashed rgba(148,163,184,0.3); padding-top:10px; font-size:20px; font-weight:bold;">
+                <span>Total Amount:</span>
+                <span id="exitTotal" style="color:#F43F5E;">₹0</span>
+              </div>
+            </div>
+            
+            <div class="form-group" style="margin-bottom:20px;">
+              <label>Payment Method</label>
+              <select id="paymentMethod" class="form-input" style="width:100%; padding:10px; border-radius:8px; background:#0F172A; color:#F1F5F9; border:1px solid rgba(148,163,184,0.1); margin-top:5px;">
+                <option value="cash">Cash</option>
+                <option value="card">Card / POS</option>
+                <option value="upi">UPI / QR</option>
+              </select>
+            </div>
+            
+            <button id="btnProcessExit" class="btn" style="width:100%; padding:15px; font-size:18px; font-weight:bold; background:linear-gradient(to right, #F43F5E, #E11D48); color:white; border:none; border-radius:8px; cursor:pointer; box-shadow:0 4px 12px rgba(244,63,94,0.3);">Process Exit & Payment</button>
+          </div>
+          
+          <div id="exitEmptyState" style="text-align:center; padding:40px 20px; color:#94A3B8;">
+            <i class="fas fa-search" style="font-size:48px; opacity:0.2; margin-bottom:15px;"></i>
+            <p>Enter a ticket or vehicle number to look up a session.</p>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Recent Activity Bottom Section -->
+      <section class="recent-entries-section" style="margin-top:30px; background:rgba(30,41,59,0.8); padding:20px; border-radius:12px;">
+        <h3 style="margin-bottom:15px;">Recent Entries & Exits</h3>
+        <div style="overflow-x:auto;">
+          <table style="width:100%; border-collapse:collapse; text-align:left;">
+            <thead>
+              <tr style="border-bottom:1px solid rgba(148,163,184,0.1);">
+                <th style="padding:12px; color:#94A3B8;">Time</th>
+                <th style="padding:12px; color:#94A3B8;">Vehicle</th>
+                <th style="padding:12px; color:#94A3B8;">Slot</th>
+                <th style="padding:12px; color:#94A3B8;">Action</th>
+                <th style="padding:12px; color:#94A3B8;">Amount</th>
+              </tr>
+            </thead>
+            <tbody id="recentActivityTable">
+              <!-- Dynamically populated -->
+              <tr>
+                <td colspan="5" style="padding:20px; text-align:center; color:#94A3B8;">Loading recent activity...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+    </div>
+  </main>
+
+  <script type="module" src="js/gate.js"></script>
+</body>
+</html>

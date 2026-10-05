@@ -1,0 +1,13 @@
+# Runtime dependencies, pinned to the versions this project was built and
+# tested against. Verified with a clean install into an empty virtualenv.
+fastapi==0.141.1
+uvicorn[standard]==0.52.4
+psycopg[binary]==3.3.5
+psycopg-pool==3.3.1
+PyJWT==2.14.0
+bcrypt==5.0.0
+python-multipart==0.0.32
+
+# Development only. Needed for tests/capture_screens.py, which drives your
+# installed Google Chrome to retake docs/screens/. Not needed to run the app:
+#     ./.venv/bin/pip install playwright==1.62.0

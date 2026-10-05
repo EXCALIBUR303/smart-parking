@@ -1,0 +1,308 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sign in · SmartPark</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;450;500;600&display=swap">
+  <link rel="stylesheet" href="css/tokens.css">
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+  <div class="auth">
+    <!-- The backdrop is the product's own subject matter: a facility plan,
+         drawn in SVG and animated so bays change state and a gate scan sweeps
+         across. It carries the "alive" quality a video would, at a few
+         kilobytes, with no decode cost and no fight with the form's legibility.
+         It is aria-hidden because it is decoration; the numbers it shows are
+         illustrative of the plan, not live operational data. -->
+    <div class="auth-field" id="field" aria-hidden="true">
+      <svg id="plan" preserveAspectRatio="xMidYMid slice" viewBox="0 0 660 940"></svg>
+    </div>
+
+    <div class="auth-brand">
+      <div class="brand-mark">SP</div>
+      <div>
+        <div class="brand-name">SmartPark</div>
+        <div class="brand-sub">Parking Operations</div>
+      </div>
+    </div>
+
+    <!-- A drawing's title block, holding the lede and what the plan behind it
+         is showing. The counts are read off the plan that is actually rendered,
+         so the panel never states a number the drawing contradicts. -->
+    <div class="auth-lede">
+      <div class="auth-lede-main">
+        <h1>Every bay,<br>accounted&nbsp;for.</h1>
+        <p>Live slot allocation, gate control, tariff billing and reporting for
+           multi-level parking facilities.</p>
+      </div>
+      <div class="auth-lede-strip" aria-hidden="true">
+        <div class="auth-lede-cell">
+          <div class="k">Bays</div><div class="v" id="k-total">—</div></div>
+        <div class="auth-lede-cell">
+          <div class="k">In use</div><div class="v" id="k-used">—</div></div>
+        <div class="auth-lede-cell">
+          <div class="k">Levels</div><div class="v">3</div></div>
+      </div>
+    </div>
+
+    <div class="auth-panel">
+      <div class="auth-card" id="card">
+        <h2>Sign in</h2>
+        <p class="auth-sub">Staff and customer accounts.</p>
+
+        <div class="auth-banner" id="banner" role="alert"></div>
+
+        <form id="form" novalidate>
+          <div class="field">
+            <label for="email">Email address</label>
+            <input class="input" type="email" id="email" name="email"
+                   autocomplete="username" required autofocus
+                   placeholder="you@smartpark.in">
+            <div class="field-error" id="email-error"></div>
+          </div>
+          <div class="field">
+            <label for="password">Password</label>
+            <input class="input" type="password" id="password" name="password"
+                   autocomplete="current-password" required>
+            <div class="field-error" id="password-error"></div>
+          </div>
+          <button class="btn btn-primary btn-block btn-lg" type="submit" id="submit"
+                  data-interactive>Sign in</button>
+        </form>
+
+        <div class="demo">
+          <div class="demo-title">
+            <span class="label">Demonstration accounts</span>
+            <span class="label" style="color:var(--ink-2);font-family:var(--font-mono);
+                  text-transform:none;letter-spacing:0">Parking@123</span>
+          </div>
+          <div class="demo-list" id="demo"></div>
+        </div>
+      </div>
+      <p class="auth-foot">DBMS PBL Project 20 · PostgreSQL 17 · Hyderabad</p>
+    </div>
+  </div>
+
+  <script type="module">
+    import { api, auth, ApiError } from './js/api.js';
+    import { enter, bindInteractive, prefersReducedMotion, animate }
+      from './js/motion.js';
+    import { icon, esc, fieldError, clearErrors, submitting } from './js/ui.js';
+
+    if (auth.token) location.replace('dashboard.html');
+
+    /* ---------------------------------------------------------------------
+       The ambient plan.
+
+       A grid of bays is drawn to scale, seeded so it looks like a real,
+       partly-full building. Then two things move, slowly:
+         - individual bays change state, one every couple of seconds
+         - a gate scan line sweeps down the plan every twelve seconds
+       Both stop dead under prefers-reduced-motion, leaving a still plan.
+       --------------------------------------------------------------------- */
+    const svg = document.getElementById('plan');
+    const NS = 'http://www.w3.org/2000/svg';
+    const COLS = 10, ROWS = 22, BW = 56, BH = 34, GX = 8, GY = 7, OFF_X = 22, OFF_Y = 16;
+    const AISLE_AFTER = 5;                       // an aisle down the middle
+    const bays = [];
+
+    function build() {
+      const frag = document.createDocumentFragment();
+
+      // Painted aisle down the centre of the plan.
+      const aisleX = OFF_X + AISLE_AFTER * (BW + GX) - GX / 2;
+      const aisle = document.createElementNS(NS, 'line');
+      aisle.setAttribute('x1', aisleX); aisle.setAttribute('y1', 0);
+      aisle.setAttribute('x2', aisleX); aisle.setAttribute('y2', 940);
+      aisle.setAttribute('stroke', 'var(--rule-strong)');
+      aisle.setAttribute('stroke-width', '2');
+      aisle.setAttribute('stroke-dasharray', '16 20');
+      frag.appendChild(aisle);
+
+      for (let r = 0; r < ROWS; r++) {
+        for (let c = 0; c < COLS; c++) {
+          const x = OFF_X + c * (BW + GX) + (c >= AISLE_AFTER ? GX : 0);
+          const y = OFF_Y + r * (BH + GY);
+          const g = document.createElementNS(NS, 'g');
+
+          const rect = document.createElementNS(NS, 'rect');
+          rect.setAttribute('x', x); rect.setAttribute('y', y);
+          rect.setAttribute('width', BW); rect.setAttribute('height', BH);
+          rect.setAttribute('rx', 3);
+          rect.setAttribute('stroke-width', '1.25');
+
+          const stripe = document.createElementNS(NS, 'rect');
+          stripe.setAttribute('x', x); stripe.setAttribute('y', y);
+          stripe.setAttribute('width', 3); stripe.setAttribute('height', BH);
+
+          const code = document.createElementNS(NS, 'text');
+          code.setAttribute('x', x + 7); code.setAttribute('y', y + 21);
+          code.setAttribute('font-family', 'var(--font-mono)');
+          code.setAttribute('font-size', '8');
+          code.setAttribute('letter-spacing', '.02em');
+          code.textContent =
+            `${r < 8 ? 'B' : r < 15 ? 'G' : 'L1'}${String.fromCharCode(65 + (c % 3))}${String(r + 1).padStart(2, '0')}`;
+
+          g.append(rect, stripe, code);
+          frag.appendChild(g);
+          // ~34% occupied, ~8% held: a believable weekday, not a full lot.
+          const roll = Math.random();
+          const state = roll < 0.34 ? 'occupied' : roll < 0.42 ? 'reserved'
+                      : roll < 0.45 ? 'offline' : 'free';
+          bays.push({ rect, stripe, code, state });
+          paint(bays[bays.length - 1], true);
+        }
+      }
+      svg.appendChild(frag);
+      refreshCounts();
+    }
+
+    /* The title block reports the plan actually on screen, recounted whenever
+       a bay changes, so the panel and the drawing can never disagree. */
+    function refreshCounts() {
+      const total = bays.length;
+      const used = bays.filter((b) => b.state === 'occupied').length;
+      const t = document.getElementById('k-total');
+      const u = document.getElementById('k-used');
+      if (t) t.textContent = String(total);
+      if (u) u.textContent = `${used} · ${Math.round((used / total) * 100)}%`;
+    }
+
+    /* Concrete hex, not var(), and deliberately so: Motion interpolates
+       between two colour VALUES, and a CSS custom property resolves to a
+       string it cannot tween. These four mirror the bay states in tokens.css
+       and are the only literal colours outside that file. */
+    const PALETTE = {
+      free:     { fill: '#FFFFFF', stroke: '#B3D8D2', stripe: '#12857B', text: '#5A6169' },
+      reserved: { fill: '#FBF2E1', stroke: '#E8CF9A', stripe: '#C8891F', text: '#8A5A12' },
+      occupied: { fill: '#22262B', stroke: '#22262B', stripe: '#12857B', text: '#C9D1D6' },
+      offline:  { fill: '#F0F0EE', stroke: '#D6D6D1', stripe: '#9AA0A6', text: '#8A9199' },
+    };
+
+    function paint(b, instant) {
+      const p = PALETTE[b.state];
+      if (instant || prefersReducedMotion()) {
+        b.rect.setAttribute('fill', p.fill);
+        b.rect.setAttribute('stroke', p.stroke);
+        b.stripe.setAttribute('fill', p.stripe);
+        b.code.setAttribute('fill', p.text);
+        return;
+      }
+      animate(b.rect,   { fill: p.fill, stroke: p.stroke }, { duration: .5, easing: [.16,1,.3,1] });
+      animate(b.stripe, { fill: p.stripe }, { duration: .5 });
+      animate(b.code,   { fill: p.text },   { duration: .5 });
+    }
+
+    build();
+
+    if (!prefersReducedMotion()) {
+      // One bay changes state every couple of seconds. Slow enough to read as
+      // a building operating, not as a screensaver competing with the form.
+      setInterval(() => {
+        const b = bays[Math.floor(Math.random() * bays.length)];
+        if (b.state === 'offline') return;
+        b.state = b.state === 'occupied'
+          ? 'free'
+          : (Math.random() < 0.72 ? 'occupied' : 'reserved');
+        paint(b);
+        refreshCounts();
+      }, 2100);
+
+      // A gate scan sweeping down the plan, the way a barrier camera sweeps.
+      const scan = document.createElementNS(NS, 'rect');
+      scan.setAttribute('x', 0); scan.setAttribute('width', 660);
+      scan.setAttribute('height', 150); scan.setAttribute('y', -150);
+      scan.setAttribute('fill', 'url(#scanGrad)');
+      const defs = document.createElementNS(NS, 'defs');
+      defs.innerHTML = `<linearGradient id="scanGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%"   stop-color="#12857B" stop-opacity="0"/>
+          <stop offset="70%"  stop-color="#12857B" stop-opacity="0.07"/>
+          <stop offset="100%" stop-color="#12857B" stop-opacity="0"/>
+        </linearGradient>`;
+      svg.append(defs, scan);
+      const sweep = () => animate(scan, { y: [-150, 940] },
+                                  { duration: 4.2, easing: 'linear' });
+      sweep(); setInterval(sweep, 12000);
+    }
+
+    enter(document.getElementById('card'));
+    bindInteractive(document);
+
+    /* --- demonstration accounts, as selectable chips --------------------- */
+    const ACCOUNTS = [
+      { role: 'admin',    tag: 'ADM', name: 'Aarti Desai · Administrator',
+        email: 'admin@smartpark.in',        note: 'Both facilities, settings' },
+      { role: 'operator', tag: 'OPS', name: 'Rohit Kulkarni · Gate operator',
+        email: 'ops.central@smartpark.in',  note: 'SmartPark Central only' },
+      { role: 'operator', tag: 'OPS', name: 'Imran Sheikh · Gate operator',
+        email: 'ops.river@smartpark.in',    note: 'Riverside only' },
+      { role: 'customer', tag: 'CUS', name: 'Rahul Sharma · Customer',
+        email: 'rahul.sharma@example.com',  note: 'Only their own records' },
+    ];
+    const demo = document.getElementById('demo');
+    demo.innerHTML = ACCOUNTS.map((a, i) => `
+      <button type="button" class="demo-chip" data-role="${a.role}"
+              data-email="${esc(a.email)}" aria-pressed="false"
+              aria-label="Use the ${esc(a.name)} demonstration account">
+        <span class="demo-role" aria-hidden="true">${a.tag}</span>
+        <span>
+          <span class="demo-name">${esc(a.name)}</span>
+          <span class="demo-mail">${esc(a.email)}</span>
+        </span>
+        <span class="demo-go" aria-hidden="true">Use</span>
+      </button>`).join('');
+
+    const form   = document.getElementById('form');
+    const banner = document.getElementById('banner');
+    const email  = document.getElementById('email');
+    const pass   = document.getElementById('password');
+    const submit = document.getElementById('submit');
+
+    demo.querySelectorAll('.demo-chip').forEach((chip) => {
+      chip.addEventListener('click', () => {
+        demo.querySelectorAll('.demo-chip').forEach((c) =>
+          c.setAttribute('aria-pressed', String(c === chip)));
+        email.value = chip.dataset.email;
+        pass.value  = 'Parking@123';
+        banner.dataset.show = 'false';
+        clearErrors(form);
+        submit.focus();
+      });
+    });
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      clearErrors(form);
+      banner.dataset.show = 'false';
+
+      // Client-side checks for responsiveness. The server is the real gate.
+      let bad = false;
+      if (!email.value.trim()) { fieldError(email, 'Enter your email address.'); bad = true; }
+      else if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.value.trim())) {
+        fieldError(email, 'That does not look like an email address.'); bad = true;
+      }
+      if (!pass.value) { fieldError(pass, 'Enter your password.'); bad = true; }
+      if (bad) { form.querySelector('[aria-invalid="true"]')?.focus(); return; }
+
+      await submitting(submit, async () => {
+        try {
+          const res = await api.login(email.value.trim(), pass.value);
+          auth.save(res.token, res.user);
+          submit.dataset.ok = 'true';
+          submit.textContent = 'Signed in';
+          location.href = 'dashboard.html';
+        } catch (err) {
+          banner.innerHTML = icon('alert') + ' ' +
+            (err instanceof ApiError ? err.message : 'Could not sign in.');
+          banner.dataset.show = 'true';
+          pass.value = ''; pass.focus();
+        }
+      });
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,189 @@
+/* ===========================================================================
+   tokens.css — SmartPark design system v2, "control room".
+
+   The concept: a parking structure drawn as an architectural plan, operated
+   from a transit control desk. Grounds are cool concrete rather than warm
+   paper; ink is charcoal; the accent is an operational teal borrowed from
+   wayfinding signage, with safety amber and a restrained coral for alerts.
+
+   Nothing outside this file contains a raw colour. Every ratio in the
+   contrast comments below was measured, not estimated.
+   =========================================================================== */
+
+:root {
+  /* --- Grounds ----------------------------------------------------------
+     Three levels of depth, achieved by tone rather than by shadow:
+       paper   the page itself
+       plate   the recessed floor plate the bay map is painted on
+       surface panels that sit ON the page
+     A card is a change of tone plus a hairline, never a drop shadow. */
+  --paper:        #FAFAF8;
+  --plate:        #EFEFEC;
+  --plate-deep:   #E7E7E3;
+  --surface:      #FFFFFF;
+  --surface-2:    #F6F6F3;
+
+  /* Solid mass. An occupied bay is filled with this: on a plan drawing a car
+     is a solid object, so it reads as one. High occupancy therefore looks
+     dense and low occupancy looks airy, with no legend required. */
+  --graphite:     #22262B;
+  --graphite-2:   #343A41;
+
+  /* --- Rules ------------------------------------------------------------
+     Hairlines are the primary structural device in this system, so there are
+     three weights of them rather than one. */
+  --rule:         #E2E2DD;   /* default hairline                       */
+  --rule-strong:  #CFCFC8;   /* an edge that must read as an edge      */
+  --rule-faint:   #EDEDE9;   /* internal division inside a panel       */
+
+  /* --- Ink --------------------------------------------------------------
+     Measured against --paper: ink 17.05:1, ink-2 6.00:1.
+     ink-3 is 3.05:1 — DECORATION ONLY. Hairline labels, aisle markings,
+     disabled glyphs. It must never carry text a user has to read. */
+  --ink:          #15181B;
+  --ink-2:        #5A6169;
+  --ink-3:        #8A9199;
+  --ink-inverse:  #FFFFFF;
+
+  /* Ink ON the dark surfaces: an occupied bay, the hover card, a toast.
+     Measured against --graphite (#22262B), the shallower of the two grounds:
+       inverse    15.22:1    primary text
+       inverse-2   9.84:1    secondary text
+       inverse-3   6.89:1    labels and captions
+     All three clear AA comfortably, so a filled bay is as readable as an
+     empty one. */
+  --ink-inverse-2: #C9D1D6;
+  --ink-inverse-3: #A6B0B7;
+
+  /* --- Operational teal -------------------------------------------------
+     accent      area fills, marks, 3px indicators   (4.31:1 on paper)
+     accent-ink  teal TEXT, and solid buttons        (5.84:1 on paper,
+                                                      6.10:1 with white on it)
+     Two values because a fill needs 3:1 and a word needs 4.5:1. */
+  --accent:       #12857B;
+  --accent-ink:   #0E6E66;
+  --accent-press: #0A5C55;
+  --accent-wash:  #E6F2F0;
+  --accent-line:  #A8D2CC;
+
+  /* --- Bay and status states -------------------------------------------
+     Colour is only ever ONE of four channels. Each bay state also differs by
+     FILL (solid vs outline), by PATTERN (hatch), by ICON and by LABEL, so the
+     map is readable in greyscale and to a colour-blind operator.
+
+       available  paper fill, hairline, teal tick        — an empty space
+       reserved   paper fill, amber dashed edge + tab    — spoken for
+       occupied   GRAPHITE FILL, inverse text            — a solid object
+       offline    hatched, grey                          — not in service  */
+  --state-free:       #12857B;
+  --state-free-ink:   #0E6E66;
+  --state-free-wash:  #E9F3F1;
+  --state-free-line:  #B3D8D2;
+
+  --state-held:       #C8891F;
+  --state-held-ink:   #8A5A12;   /* 5.66:1 on paper */
+  --state-held-wash:  #FBF2E1;
+  --state-held-line:  #E8CF9A;
+
+  --state-full:       #22262B;   /* graphite, not a hue — see above */
+  --state-full-ink:   #15181B;
+  --state-full-wash:  #22262B;
+  --state-full-line:  #22262B;
+
+  --state-off:        #9AA0A6;
+  /* Measured against --state-off-wash, not against paper: an offline bay's
+     label sits on the wash with a hatch over it, and #6A7076 came out at
+     4.39:1 there. #656A70 gives 4.78:1, with margin for the hatch. */
+  --state-off-ink:    #656A70;
+  --state-off-wash:   #F0F0EE;
+  --state-off-line:   #D6D6D1;
+
+  /* --- Feedback ---------------------------------------------------------- */
+  --ok:        #12857B;  --ok-ink:      #0E6E66;  --ok-wash:      #E6F2F0;
+  --warn:      #C8891F;  --warn-ink:    #8A5A12;  --warn-wash:    #FBF2E1;
+  --alert:     #D0563E;  --alert-ink:   #B0402C;  --alert-wash:   #FBEDE9;
+  --alert-line:#EBC4B9;
+
+  /* --- Secondary accents, used ONLY on the KPI instrument chips ----------
+     The command strip stays a teal-and-graphite system; these two give the
+     five headline figures a quiet per-metric identity (movement = slate-blue,
+     money = indigo) the way Reference 2's cards do, without letting colour
+     leak into the floor map or the controls. Both are measured on their own
+     wash so the chip glyph clears 3:1.
+       info   #2F6DB0 on #EAF1F8  → 4.02:1
+       violet #675AB0 on #ECEAF7  → 4.66:1  */
+  --info:       #2F6DB0;  --info-ink:   #255C97;  --info-wash:   #EAF1F8;  --info-line: #C4D8EC;
+  --violet:     #675AB0;  --violet-ink: #52469A;  --violet-wash: #ECEAF7;  --violet-line: #D2CBEC;
+
+  /* --- Type -------------------------------------------------------------
+     Bricolage Grotesque carries the display voice: it is variable across
+     optical size and width, and its slightly irregular terminals stop the
+     interface reading as a template. IBM Plex Sans runs the controls because
+     it was drawn for exactly this kind of density, and IBM Plex Mono with
+     tabular figures carries every number, plate, bay code and clock so
+     columns align and animated counters cannot shift the layout. */
+  --font-display: 'Bricolage Grotesque', 'Archivo', system-ui, sans-serif;
+  --font-ui:      'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono:    'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* One modular scale, 1.200, 15px base. */
+  --t-2xs: 0.679rem;   --t-xs:  0.815rem;  --t-sm:  0.9rem;
+  --t-md:  1rem;       --t-lg:  1.2rem;    --t-xl:  1.44rem;
+  --t-2xl: 1.728rem;   --t-3xl: 2.35rem;   --t-4xl: 3.1rem;   --t-5xl: 4.2rem;
+
+  --lh-tight: 1.05;  --lh-snug: 1.3;  --lh-body: 1.55;
+  /* Signage tracking: uppercase micro-labels need air to stay legible. */
+  --track-label: 0.09em;
+  --track-tight: -0.02em;
+
+  /* --- Space (4px base) --------------------------------------------------- */
+  --s1: .25rem;  --s2: .5rem;   --s3: .75rem;  --s4: 1rem;
+  --s5: 1.5rem;  --s6: 2rem;    --s7: 3rem;    --s8: 4rem;
+
+  /* --- Shape -------------------------------------------------------------
+     Deliberately tight. Parking structures are orthogonal; a 12px radius on
+     everything is the single clearest tell of a template dashboard. Bays are
+     nearly square, panels are 3px, only pills are round. */
+  --r-bay:  3px;
+  --r-sm:   3px;
+  --r:      4px;
+  --r-lg:   6px;
+  --r-pill: 999px;
+
+  /* Depth is used ONCE, for things that genuinely float above the plane.
+     Everything else separates by tone and hairline. */
+  --lift:   0 1px 2px rgba(21, 24, 27, .05), 0 8px 24px rgba(21, 24, 27, .08);
+  --lift-2: 0 2px 6px rgba(21, 24, 27, .07), 0 18px 48px rgba(21, 24, 27, .12);
+  /* Recessed plate: an inner edge, so the map sits INTO the page. */
+  --inset:  inset 0 1px 0 rgba(21, 24, 27, .05);
+
+  /* --- Motion ------------------------------------------------------------
+     A custom curve, weighted so entrances settle rather than stop dead.
+     Durations are short on purpose: this is operational software, and an
+     operator waiting on a transition is an operator being slowed down. */
+  --ease:      cubic-bezier(.22,.61,.36,1);
+  --ease-out:  cubic-bezier(.16,1,.3,1);
+  --ease-snap: cubic-bezier(.4,0,.2,1);
+  --d-tap:   .12s;   /* press feedback            */
+  --d-ui:    .18s;   /* hover, toggle, focus      */
+  --d-state: .32s;   /* a bay changing state      */
+  --d-panel: .26s;   /* side panel, modal         */
+  --d-enter: .42s;   /* page and section entrance */
+
+  /* --- Layout -------------------------------------------------------------- */
+  --rail-w:   232px;
+  --strip-h:  auto;
+  --measure:  66ch;
+}
+
+/* Global reduced-motion backstop. The JS layer honours the preference too
+   (web/js/motion.js resolves it once for the whole app); this catches any CSS
+   transition a component adds without going through that layer. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .001ms !important;
+    scroll-behavior: auto !important;
+  }
+}

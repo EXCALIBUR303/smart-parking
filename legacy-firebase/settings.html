@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Settings - SmartPark</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Poppins:wght@600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link rel="stylesheet" href="css/styles.css">
+  <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/pages.css">
+</head>
+<body>
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <div class="logo">
+        <i class="fas fa-car-side"></i>
+        <span>SmartPark</span>
+      </div>
+    </div>
+    <nav class="sidebar-nav">
+      <a href="dashboard.html" class="nav-link" data-page="dashboard">
+        <i class="fas fa-chart-pie"></i><span>Dashboard</span>
+      </a>
+      <a href="slots.html" class="nav-link" data-page="slots">
+        <i class="fas fa-th-large"></i><span>Parking Slots</span>
+      </a>
+      <a href="gate.html" class="nav-link" data-page="gate">
+        <i class="fas fa-dungeon"></i><span>Gate Entry/Exit</span>
+      </a>
+      <a href="reservations.html" class="nav-link" data-page="reservations">
+        <i class="fas fa-calendar-check"></i><span>Reservations</span>
+      </a>
+      <a href="passes.html" class="nav-link" data-page="passes">
+        <i class="fas fa-id-card"></i><span>Passes</span>
+      </a>
+      <a href="billing.html" class="nav-link" data-page="billing">
+        <i class="fas fa-file-invoice-dollar"></i><span>Billing</span>
+      </a>
+      <a href="reports.html" class="nav-link" data-page="reports">
+        <i class="fas fa-chart-bar"></i><span>Reports</span>
+      </a>
+      <a href="customers.html" class="nav-link" data-page="customers">
+        <i class="fas fa-users"></i><span>Customers</span>
+      </a>
+      <a href="settings.html" class="nav-link active" data-page="settings">
+        <i class="fas fa-cog"></i><span>Settings</span>
+      </a>
+    </nav>
+    <div class="sidebar-footer">
+      <button class="nav-link" id="logoutBtn">
+        <i class="fas fa-sign-out-alt"></i><span>Logout</span>
+      </button>
+    </div>
+  </aside>
+
+  <main class="main-content">
+    <header class="top-header">
+      <button class="menu-toggle" id="menuToggle">
+        <i class="fas fa-bars"></i>
+      </button>
+      <div class="header-title">
+        <h1>Settings</h1>
+        <p class="header-subtitle">System configuration</p>
+      </div>
+      <div class="header-actions">
+        <div class="user-profile">
+          <div class="avatar"><i class="fas fa-user"></i></div>
+          <span class="user-name" id="userName">Admin</span>
+        </div>
+      </div>
+    </header>
+
+    <div class="page-content">
+      <div class="card" style="margin-bottom: 20px;">
+          <h3>System Data Management</h3>
+          <p>Use these tools to setup or reset your environment.</p>
+          <div style="margin-top: 15px; display: flex; gap: 15px;">
+              <button class="btn btn-primary" id="seedDataBtn">Seed Sample Data</button>
+              <button class="btn" id="clearDataBtn" style="background: #F43F5E;">Clear All Data</button>
+          </div>
+      </div>
+    </div>
+  </main>
+  
+  <script type="module" src="js/settings.js"></script>
+</body>
+</html>

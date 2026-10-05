@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Reservations - SmartPark</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Poppins:wght@600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link rel="stylesheet" href="css/styles.css">
+  <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/pages.css">
+</head>
+<body>
+  <!-- Sidebar -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <div class="logo">
+        <i class="fas fa-car-side"></i>
+        <span>SmartPark</span>
+      </div>
+    </div>
+    <nav class="sidebar-nav">
+      <a href="dashboard.html" class="nav-link" data-page="dashboard">
+        <i class="fas fa-chart-pie"></i><span>Dashboard</span>
+      </a>
+      <a href="slots.html" class="nav-link" data-page="slots">
+        <i class="fas fa-th-large"></i><span>Parking Slots</span>
+      </a>
+      <a href="gate.html" class="nav-link" data-page="gate">
+        <i class="fas fa-dungeon"></i><span>Gate Entry/Exit</span>
+      </a>
+      <a href="reservations.html" class="nav-link active" data-page="reservations">
+        <i class="fas fa-calendar-check"></i><span>Reservations</span>
+      </a>
+      <a href="passes.html" class="nav-link" data-page="passes">
+        <i class="fas fa-id-card"></i><span>Passes</span>
+      </a>
+      <a href="billing.html" class="nav-link" data-page="billing">
+        <i class="fas fa-file-invoice-dollar"></i><span>Billing</span>
+      </a>
+      <a href="reports.html" class="nav-link" data-page="reports">
+        <i class="fas fa-chart-bar"></i><span>Reports</span>
+      </a>
+      <a href="customers.html" class="nav-link" data-page="customers">
+        <i class="fas fa-users"></i><span>Customers</span>
+      </a>
+      <a href="settings.html" class="nav-link" data-page="settings">
+        <i class="fas fa-cog"></i><span>Settings</span>
+      </a>
+    </nav>
+    <div class="sidebar-footer">
+      <button class="nav-link" id="logoutBtn">
+        <i class="fas fa-sign-out-alt"></i><span>Logout</span>
+      </button>
+    </div>
+  </aside>
+
+  <!-- Main Content -->
+  <main class="main-content">
+    <!-- Top Header -->
+    <header class="top-header">
+      <button class="menu-toggle" id="menuToggle">
+        <i class="fas fa-bars"></i>
+      </button>
+      <div class="header-title">
+        <h1>Reservations</h1>
+        <p class="header-subtitle">Manage upcoming and active parking reservations</p>
+      </div>
+      <div class="header-actions">
+        <div class="search-box">
+          <i class="fas fa-search"></i>
+          <input type="text" placeholder="Search reservations...">
+        </div>
+        <div class="user-profile">
+          <div class="avatar">
+            <i class="fas fa-user"></i>
+          </div>
+          <span class="user-name" id="userName">Admin</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- Page Content -->
+    <div class="page-content">
+      
+      <!-- Top Action Bar -->
+      <div class="action-bar">
+        <div class="filter-controls">
+          <select id="statusFilter" class="form-control">
+            <option value="all">All Statuses</option>
+            <option value="pending">Pending</option>
+            <option value="confirmed">Confirmed</option>
+            <option value="checkedin">Checked-in</option>
+            <option value="completed">Completed</option>
+            <option value="expired">Expired</option>
+            <option value="cancelled">Cancelled</option>
+          </select>
+          <input type="date" id="dateFilter" class="form-control">
+        </div>
+        <button class="btn btn-primary" id="btnNewReservation">
+          <i class="fas fa-plus"></i> New Reservation
+        </button>
+      </div>
+
+      <!-- Stats Strip -->
+      <div class="stats-strip grid-5">
+        <div class="stat-box">
+          <h3>Total</h3>
+          <p class="stat-value" id="statTotal">0</p>
+        </div>
+        <div class="stat-box">
+          <h3>Active</h3>
+          <p class="stat-value" id="statActive">0</p>
+        </div>
+        <div class="stat-box">
+          <h3>Upcoming</h3>
+          <p class="stat-value" id="statUpcoming">0</p>
+        </div>
+        <div class="stat-box">
+          <h3>Expired</h3>
+          <p class="stat-value" id="statExpired">0</p>
+        </div>
+        <div class="stat-box">
+          <h3>Cancelled</h3>
+          <p class="stat-value" id="statCancelled">0</p>
+        </div>
+      </div>
+
+      <!-- Reservations List -->
+      <div id="reservationsList" class="reservations-grid">
+        <!-- Filled via JS -->
+      </div>
+      <div id="emptyState" class="empty-state" style="display: none;">
+        <i class="fas fa-calendar-times"></i>
+        <p>No reservations found</p>
+      </div>
+
+    </div>
+  </main>
+
+  <!-- New Reservation Modal -->
+  <div id="newReservationModal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>New Reservation</h2>
+        <span class="close-modal" id="closeReservationModal">&times;</span>
+      </div>
+      <div class="modal-body">
+        <form id="reservationForm">
+          <div class="form-group">
+            <label>Customer</label>
+            <input type="text" id="resCustomerSearch" class="form-control" placeholder="Search customer by name or phone" autocomplete="off" required>
+            <input type="hidden" id="resCustomerId">
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Vehicle Plate</label>
+              <input type="text" id="resVehiclePlate" class="form-control" required>
+            </div>
+            <div class="form-group">
+              <label>Vehicle Type</label>
+              <select id="resVehicleType" class="form-control" required>
+                <option value="Car">Car</option>
+                <option value="Bike">Bike</option>
+                <option value="EV">EV</option>
+                <option value="Disabled">Disabled</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Start Time</label>
+              <input type="datetime-local" id="resStartTime" class="form-control" required>
+            </div>
+            <div class="form-group">
+              <label>End Time</label>
+              <input type="datetime-local" id="resEndTime" class="form-control" required>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Facility (Optional)</label>
+              <select id="resFacility" class="form-control">
+                <option value="">Any</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Zone (Optional)</label>
+              <select id="resZone" class="form-control">
+                <option value="">Any</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Select Slot</label>
+            <select id="resSlot" class="form-control" required disabled>
+              <option value="">Select criteria first...</option>
+            </select>
+          </div>
+          <div class="form-actions">
+            <button type="button" class="btn btn-secondary" id="btnCancelRes">Cancel</button>
+            <button type="submit" class="btn btn-primary">Create Reservation</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Detail Modal -->
+  <div id="detailModal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>Reservation Details</h2>
+        <span class="close-modal" id="closeDetailModal">&times;</span>
+      </div>
+      <div class="modal-body" id="detailModalBody">
+        <!-- Filled via JS -->
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="js/reservations.js"></script>
+</body>
+</html>
