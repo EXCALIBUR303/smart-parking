@@ -4,7 +4,7 @@
 import { api, ApiError, auth } from './api.js';
 import {
   mountShell, icon, esc, money, duration, dateTime, timeOnly,
-  errorState, emptyRow, facility, toast, fieldError, clearErrors, submitting, modal,
+  errorState, facility, toast, fieldError, clearErrors, submitting, modal, dataTable, skeleton,
 } from './ui.js';
 import { enter, revealList, flashBay, bindInteractive } from './motion.js';
 
@@ -26,7 +26,7 @@ async function init({ content, user }) {
       <select class="select" id="facility" style="max-width:260px"></select>
     </div>
 
-    <div class="dash-grid" style="grid-template-columns:1fr 1fr">
+    <div class="dash-grid gate-grid">
       <section class="card" id="entry-card">
         <div class="card-head"><h2>Arrival</h2>
           <span class="hint">The next free bay is chosen and locked automatically</span></div>
@@ -67,17 +67,11 @@ async function init({ content, user }) {
         <div class="spacer"></div>
         <button class="btn btn-sm" id="refresh-activity" data-interactive>
           ${icon('refresh')} Refresh</button></div>
-      <div class="table-wrap">
-        <table><caption class="sr-only">Recent gate events</caption>
-          <thead><tr>
-            <th scope="col">Time</th><th scope="col">Vehicle</th><th scope="col">Bay</th>
-            <th scope="col">Duration</th><th scope="col">State</th>
-            <th scope="col" class="num">Charge</th>
-          </tr></thead><tbody id="activity"></tbody></table>
-      </div>
+      <div id="activity"></div>
     </section>`;
 
   const selF = content.querySelector('#facility');
+  let activityTable = null;
   let facilities;
   try { facilities = await api.facilities(); }
   catch (err) { errorState(content, err, () => location.reload()); return; }
@@ -100,28 +94,35 @@ async function init({ content, user }) {
   content.querySelector('#refresh-activity').addEventListener('click', loadActivity);
 
   async function loadActivity() {
-    const tbody = content.querySelector('#activity');
-    try {
-      const rows = await api.sessions({ facility_id: Number(selF.value), limit: 12 });
-      if (!rows.length) {
-        emptyRow(tbody, 6, 'No sessions today',
-                 'Record a gate entry above to begin the log.');
-        return;
-      }
-      tbody.innerHTML = rows.map((r) => `<tr>
-        <td class="mono">${esc(timeOnly(r.entry_time))}</td>
-        <td class="reg">${esc(r.plate_number)}</td>
-        <td class="mono">${esc(r.slot_code)}</td>
-        <td class="mono">${esc(duration(r.duration_minutes))}</td>
-        <td><span class="badge ${r.is_active ? 'badge-occupied' : 'badge-paid'}">${
-          r.is_active ? 'In lot' : 'Departed'}</span></td>
-        <td class="num mono">${r.total_amount != null ? esc(money(r.total_amount)) : '—'}</td>
-      </tr>`).join('');
-      revealList(tbody.querySelectorAll('tr'), { step: 0.018 });
-    } catch (err) {
-      tbody.innerHTML = `<tr><td colspan="6" style="padding:0;border:0"></td></tr>`;
-      errorState(tbody.querySelector('td'), err, loadActivity);
-    }
+    const host = content.querySelector('#activity');
+    if (!activityTable) skeleton(host, { rows: 4 });
+    let rows;
+    try { rows = await api.sessions({ facility_id: Number(selF.value), limit: 12 }); }
+    catch (err) { activityTable = null; errorState(host, err, loadActivity); return; }
+    if (activityTable) { activityTable.setRows(rows); return; }
+    activityTable = dataTable(host, {
+      caption: 'Recent gate events',
+      rows,
+      pageSize: 12,
+      searchPlaceholder: 'Search registration, ticket or bay',
+      emptyTitle: 'No sessions yet',
+      emptyBody: 'Record a gate entry above to begin the log.',
+      columns: [
+        { key: 'entry_time', label: 'Arrived',
+          render: (r) => `<span class="mono nowrap">${esc(timeOnly(r.entry_time))}</span>` },
+        { key: 'plate_number', label: 'Vehicle', render: (r) => `<span class="plate-chip">${esc(r.plate_number)}</span>` },
+        { key: 'ticket_no', label: 'Ticket', csvOnly: true },
+        { key: 'slot_code', label: 'Bay', render: (r) => `<span class="mono nowrap">${esc(r.slot_code)}</span>` },
+        { key: 'duration_minutes', label: 'Stay', num: true,
+          render: (r) => `<span class="mono nowrap">${esc(duration(r.duration_minutes))}</span>` },
+        { key: 'is_active', label: 'State', value: (r) => (r.is_active ? 'In lot' : 'Departed'),
+          render: (r) => `<span class="badge ${r.is_active ? 'badge-occupied' : 'badge-paid'}">${
+            r.is_active ? 'In lot' : 'Departed'}</span>` },
+        { key: 'total_amount', label: 'Charge', num: true,
+          render: (r) => r.total_amount != null ? `<span class="money nowrap">${esc(money(r.total_amount))}</span>`
+            : '<span class="muted">—</span>' },
+      ],
+    });
   }
 
   // Exposed so the entry and exit handlers can refresh the log after a change.

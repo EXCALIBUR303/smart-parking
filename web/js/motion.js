@@ -13,12 +13,38 @@
    changes 0.32s, panels 0.26s, entrances 0.42s. Nothing exceeds 0.5s, because
    an operator waiting on an animation is an operator being slowed down.
    =========================================================================== */
-import { animate, stagger, inView, spring }
-  from 'https://cdn.jsdelivr.net/npm/motion@11.18.2/+esm';
-
 const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
 let reduced = mq.matches;
-mq.addEventListener('change', (e) => { reduced = e.matches; });
+mq.addEventListener('change', (e) => { reduced = e.matches || !motionLoaded; });
+
+/* Motion comes from a CDN. Every page imports this module, so a static import
+   that failed (no internet in a viva room) would stop the whole app loading.
+   Loaded dynamically instead: if it is unreachable the app runs without
+   animation, and the stand-in below applies each animation's END state at once
+   so nothing is left invisible or half-drawn. */
+let animate, stagger, inView, spring, motionLoaded = true;
+try {
+  ({ animate, stagger, inView, spring } =
+    await import('https://cdn.jsdelivr.net/npm/motion@11.18.2/+esm'));
+} catch {
+  motionLoaded = false;
+  reduced = true;
+  const done = { finished: Promise.resolve(), then: (r) => Promise.resolve().then(r),
+                 stop() {}, cancel() {}, complete() {} };
+  const last = (v) => (Array.isArray(v) ? v[v.length - 1] : v);
+  animate = (target, keyframes, options = {}) => {
+    if (typeof target === 'number') { options.onUpdate?.(keyframes); return done; }
+    const els = target instanceof Element ? [target] : Array.from(target || []);
+    els.forEach((el) => Object.entries(keyframes || {}).forEach(([prop, v]) => {
+      if (['scale', 'x', 'y'].includes(prop)) return;     // shorthand props: leave at rest
+      el.style[prop] = String(last(v));
+    }));
+    return done;
+  };
+  stagger = () => 0;
+  inView = (el, cb) => { cb(); return () => {}; };
+  spring = undefined;
+}
 export const prefersReducedMotion = () => reduced;
 
 export const EASE     = [0.22, 0.61, 0.36, 1];

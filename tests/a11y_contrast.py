@@ -54,7 +54,8 @@ JS = r"""
   return out;
 }
 """
-PAGES = ["index.html","dashboard.html","slots.html","gate.html","billing.html","reports.html"]
+PAGES = ["index.html","dashboard.html","slots.html","gate.html","reservations.html","passes.html",
+         "billing.html","reports.html","customers.html","settings.html"]
 total = 0
 with sync_playwright() as p:
     br = p.chromium.launch(channel="chrome", headless=True)

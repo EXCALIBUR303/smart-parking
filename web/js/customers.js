@@ -171,21 +171,22 @@ async function showVehicles(customer, onDone) {
   } catch (err) { errorToast('Could not load vehicles', err); return; }
 
   const list = (vs) => vs.length ? `
-    <div class="table-wrap"><table>
+    <div class="dt"><div class="table-wrap"><table role="table">
       <caption class="sr-only">Vehicles</caption>
-      <thead><tr><th scope="col">Registration</th><th scope="col">Type</th>
-        <th scope="col">Vehicle</th><th scope="col">State</th>
-        <th scope="col" class="dt-act-h"><span class="sr-only">Actions</span></th></tr></thead>
-      <tbody>${vs.map((v) => `<tr>
-        <td class="reg">${esc(v.plate_number)}</td>
-        <td>${esc(v.vehicle_type_name)}</td>
-        <td>${esc([v.make, v.model, v.colour].filter(Boolean).join(' ') || '—')}</td>
-        <td>${v.is_parked ? '<span class="badge badge-occupied">In lot</span>'
+      <thead role="rowgroup"><tr role="row"><th scope="col" role="columnheader">Registration</th>
+        <th scope="col" role="columnheader">Type</th>
+        <th scope="col" role="columnheader">Vehicle</th><th scope="col" role="columnheader">State</th>
+        <th scope="col" role="columnheader" class="dt-act-h"><span class="sr-only">Actions</span></th></tr></thead>
+      <tbody role="rowgroup">${vs.map((v, i) => `<tr role="row" data-i="${i}">
+        <td role="cell" data-label="Registration"><span class="plate-chip">${esc(v.plate_number)}</span></td>
+        <td role="cell" data-label="Type">${esc(v.vehicle_type_name)}</td>
+        <td role="cell" data-label="Vehicle">${esc([v.make, v.model, v.colour].filter(Boolean).join(' ') || '—')}</td>
+        <td role="cell" data-label="State">${v.is_parked ? '<span class="badge badge-occupied">In lot</span>'
                           : '<span class="badge badge-neutral">Away</span>'}</td>
-        <td class="dt-act"><button class="btn btn-icon btn-sm btn-ghost" type="button"
+        <td role="cell" class="dt-act"><button class="btn btn-icon btn-sm btn-ghost" type="button"
             data-veh="${v.vehicle_id}" aria-haspopup="menu"
             aria-label="Actions for ${esc(v.plate_number)}">${icon('more')}</button></td>
-      </tr>`).join('')}</tbody></table></div>` : `
+      </tr>`).join('')}</tbody></table></div></div>` : `
     <div class="empty" style="border:0;background:transparent">
       ${icon('car')}<div class="empty-title">No vehicles yet</div>
       <p>Add one below so this customer can park.</p></div>`;

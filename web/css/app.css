@@ -668,16 +668,17 @@ kbd {
 }
 .cell-sub { font-size: var(--t-2xs); color: var(--ink-2); margin-top: 2px; white-space: nowrap; }
 .stat-alert .stat-value { color: var(--alert-ink); }
-.seg-count { font-family: var(--font-mono); font-size: var(--t-2xs); opacity: .65; margin-left: 4px; }
+.seg-count { font-family: var(--font-mono); font-size: var(--t-2xs); margin-left: 4px; }
 
 /* One line naming the database rule behind a screen: the viva talking point,
    kept quiet so it never competes with the data. */
 .rule-note {
-  display: flex; align-items: center; gap: var(--s2); margin: 0;
+  display: block; margin: 0; line-height: 1.6;
   padding: var(--s2) var(--s5); font-size: var(--t-xs); color: var(--ink-2);
   background: var(--surface-2); border-bottom: 1px solid var(--rule);
 }
-.rule-note svg { width: 13px; height: 13px; flex: none; color: var(--accent-ink); }
+.rule-note svg { width: 13px; height: 13px; display: inline-block; vertical-align: -2px;
+                 margin-right: var(--s1); color: var(--accent-ink); }
 .rule-note code { font-family: var(--font-mono); font-size: var(--t-2xs); color: var(--ink);
                   background: var(--surface); border: 1px solid var(--rule); padding: 0 4px; border-radius: 2px; }
 .tab svg { width: 15px; height: 15px; vertical-align: -3px; margin-right: var(--s2); stroke-width: 1.7; }
@@ -1116,7 +1117,8 @@ table.keys td:first-child { width: 7em; }
   .metric { padding: var(--s3); }
   .metric-lead { grid-column: 1 / -1; }
   .metric-lead .metric-value { font-size: var(--t-2xl); }
-  .metric[data-priority="low"] { display: none; }
+  /* All five figures fit as a lead card over a 2x2 grid once the header no
+     longer sticks, so none has to be hidden. */
   .metric-value { font-size: var(--t-xl); }
   .rank { grid-template-columns: repeat(auto-fill, minmax(70px, 1fr)); gap: 5px; }
   .bay { min-height: 52px; padding: 5px 5px 5px 9px; }
@@ -1329,3 +1331,80 @@ table.audit-diff td { word-break: break-word; }
 .input-wrap .input { padding-right: 42px; }
 .input-addon { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); color: var(--ink-2); }
 .input-addon svg { width: 16px; height: 16px; }
+
+/* ------------------------------------------------ responsive: shared table
+   Desktop keeps the table. The sort picker only appears once the header row
+   is hidden, so there is always exactly one way to sort on screen. */
+.dt-sort-select { display: none; max-width: 190px; }
+
+@media (max-width: 1100px) {
+  .panel-head { flex-wrap: wrap; row-gap: var(--s3); }
+  .panel-head .hint { flex-basis: 100%; order: 9; }
+}
+
+/* The table's own width decides the layout, not the viewport: the same page
+   is narrow on a phone and also on a laptop with the rail open. */
+.dt { container: dt / inline-size; }
+
+@container dt (max-width: 880px) {
+  .dt-sort-select { display: block; flex: 1 1 140px; }
+  .dt thead { position: absolute; width: 1px; height: 1px; overflow: hidden;
+              clip: rect(0 0 0 0); white-space: nowrap; }
+  .dt table, .dt tbody { display: block; }
+  /* Each record becomes a small card: the first column is its headline, the
+     rest flow into as many labelled columns as the width allows. */
+  .dt tbody tr[data-i] {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: var(--s3) var(--s4); padding: var(--s4); border-bottom: 1px solid var(--rule);
+    position: relative;
+  }
+  .dt tbody tr[data-i]:last-child { border-bottom: 0; }
+  .dt tbody td { display: block; padding: 0; border: 0; min-width: 0; text-align: left; }
+  .dt tbody td[data-label]::before {
+    content: attr(data-label); display: block; margin-bottom: 2px;
+    font-size: var(--t-2xs); text-transform: uppercase; letter-spacing: var(--track-label);
+    color: var(--ink-2); font-family: var(--font-ui); font-weight: 500;
+  }
+  .dt tbody td:first-child { grid-column: 1 / -1; padding-right: 44px; font-size: var(--t-md); }
+  .dt tbody td:first-child::before { display: none; }
+  .dt td.dt-act { position: absolute; top: var(--s3); right: var(--s2); width: auto; padding: 0 !important; }
+  .dt tbody tr:has(td.dt-empty) { display: block; }
+  .dt .cell-sub, .dt .nowrap, .dt td .mono { white-space: normal; }
+  .dt-foot { flex-wrap: wrap; }
+}
+
+@media (max-width: 720px) {
+  .panel-head .seg { max-width: 100%; overflow-x: auto; flex-wrap: nowrap; scrollbar-width: none; }
+  .panel-head .seg::-webkit-scrollbar { display: none; }
+  .panel-head .seg button { white-space: nowrap; }
+  .panel-head > .btn-primary { flex: 1 1 100%; justify-content: center; }
+
+  .ledger-mix { grid-template-columns: 1fr; padding: var(--s4); }
+  .mix-total { grid-row: auto; }
+  .form-row { grid-template-columns: 1fr !important; }
+  .history-search .btn { flex: 1 1 100%; justify-content: center; }
+  .rule-note { padding: var(--s2) var(--s4); }
+  .stat-row { grid-template-columns: 1fr 1fr; }
+  .stat { padding: var(--s3) var(--s4); }
+  .stat:nth-child(odd) { border-left: 0; }
+  .stat:nth-child(n+3) { border-top: 1px solid var(--rule); }
+  .stat-value { font-size: var(--t-xl); }
+  .tabs { margin-bottom: var(--s4); }
+}
+
+@media (max-width: 900px) {
+  /* A sticky header holding five figures would pin half a phone screen in
+     place; below desktop the header scrolls away with the page. */
+  .command { position: static; }
+}
+@media (max-width: 560px) {
+  .crumbs { display: none; }
+  .live-label, .live-sep { display: none; }
+  .command-top { gap: var(--s3); }
+}
+
+.gate-grid { grid-template-columns: 1fr 1fr; }
+@media (max-width: 900px) { .gate-grid { grid-template-columns: 1fr; } }
+/* Codes and figures in the older hand-built tables (reports, settings) must
+   not break across lines; the wrapper scrolls instead. */
+.table-wrap td.mono, .table-wrap td.num, .table-wrap td.money { white-space: nowrap; }

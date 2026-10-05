@@ -565,6 +565,7 @@ export function dataTable(host, {
   columns = all.filter((c) => !c.csvOnly);
   const sortAt = sort ? columns.findIndex((c) => c.key === sort.key) : -1;
   const state = { rows, q: '', key: sortAt >= 0 ? sortAt : null, dir: sort?.dir || 'asc', page: 1 };
+  const sortId = 'dt-sort-' + Math.random().toString(36).slice(2, 8);
   const val = (col, row) => (col.value ? col.value(row) : row[col.key]);
   const searchable = all.filter((c) => !searchKeys || searchKeys.includes(c.key));
 
@@ -577,17 +578,24 @@ export function dataTable(host, {
         <span class="dt-count" aria-live="polite"></span>
         <span class="spacer"></span>
         ${toolbar}
+        <label class="sr-only" for="${sortId}">Sort by</label>
+        <select class="select dt-sort-select" id="${sortId}">
+          <option value="">Sort by…</option>
+          ${columns.map((c, i) => c.sortable === false ? '' : `
+            <option value="${i}:asc">${esc(c.label)} ↑</option>
+            <option value="${i}:desc">${esc(c.label)} ↓</option>`).join('')}
+        </select>
         ${csv ? `<button class="btn btn-sm" type="button" data-dt-csv>${icon('download')} Export CSV</button>` : ''}
       </div>
-      <div class="table-wrap"><table>
+      <div class="table-wrap"><table role="table">
         <caption class="sr-only">${esc(caption)}</caption>
-        <thead><tr>${columns.map((c, i) => {
+        <thead role="rowgroup"><tr role="row">${columns.map((c, i) => {
           const can = c.sortable !== false;
-          return `<th scope="col" class="${c.num ? 'num' : ''}" ${can ? `aria-sort="none" data-col="${i}"` : ''}>
+          return `<th scope="col" role="columnheader" class="${c.num ? 'num' : ''}" ${can ? `aria-sort="none" data-col="${i}"` : ''}>
             ${can ? `<button type="button" class="dt-sort">${esc(c.label)}${icon('sort', 'dt-sort-icon')}</button>`
                   : esc(c.label)}</th>`;
-        }).join('')}${rowActions ? '<th scope="col" class="dt-act-h"><span class="sr-only">Actions</span></th>' : ''}</tr></thead>
-        <tbody></tbody>
+        }).join('')}${rowActions ? '<th scope="col" role="columnheader" class="dt-act-h"><span class="sr-only">Actions</span></th>' : ''}</tr></thead>
+        <tbody role="rowgroup"></tbody>
       </table></div>
       <div class="dt-foot">
         <span class="dt-range"></span>
@@ -638,18 +646,20 @@ export function dataTable(host, {
       const on = Number(th.dataset.col) === state.key;
       th.setAttribute('aria-sort', on ? (state.dir === 'asc' ? 'ascending' : 'descending') : 'none');
     });
+    $('.dt-sort-select').value = state.key === null ? '' : `${state.key}:${state.dir}`;
 
     if (!slice.length) {
-      tbody.innerHTML = `<tr><td colspan="${colspan}" class="dt-empty">
+      tbody.innerHTML = `<tr role="row"><td role="cell" colspan="${colspan}" class="dt-empty">
         <div class="empty">${icon(state.q ? 'search' : 'inbox')}
           <div class="empty-title">${esc(state.q ? `No matches for “${state.q}”` : emptyTitle)}</div>
           ${state.q ? '<div class="empty-action"><button class="btn btn-sm" type="button" data-dt-clear>Clear search</button></div>'
                     : (emptyBody ? `<p>${esc(emptyBody)}</p>` : '')}
         </div></td></tr>`;
     } else {
-      tbody.innerHTML = slice.map((r, i) => `<tr data-i="${start + i}" ${onRowClick ? 'class="dt-clickable"' : ''}>
-        ${columns.map((c) => `<td class="${c.num ? 'num' : ''}">${c.render ? c.render(r) : esc(val(c, r) ?? '—')}</td>`).join('')}
-        ${rowActions ? `<td class="dt-act"><button class="btn btn-icon btn-sm btn-ghost" type="button"
+      tbody.innerHTML = slice.map((r, i) => `<tr role="row" data-i="${start + i}" ${onRowClick ? 'class="dt-clickable"' : ''}>
+        ${columns.map((c) => `<td role="cell" class="${c.num ? 'num' : ''}" data-label="${esc(c.label)}">${
+          c.render ? c.render(r) : esc(val(c, r) ?? '—')}</td>`).join('')}
+        ${rowActions ? `<td role="cell" class="dt-act"><button class="btn btn-icon btn-sm btn-ghost" type="button"
             data-dt-menu="${start + i}" aria-haspopup="menu" aria-label="More actions">${icon('more')}</button></td>` : ''}
       </tr>`).join('');
     }
@@ -676,6 +686,11 @@ export function dataTable(host, {
     } catch (err) { if (mine === seq) errorToast('Search failed', err); }
     finally { if (mine === seq) delete host.querySelector('.dt').dataset.busy; }
   };
+  $('.dt-sort-select').addEventListener('change', (e) => {
+    if (!e.target.value) return;
+    const [k, dir] = e.target.value.split(':');
+    state.key = Number(k); state.dir = dir; render();
+  });
   $('.dt-search input').addEventListener('input', (e) => {
     clearTimeout(t);
     t = setTimeout(() => runSearch(e.target.value), onSearch ? 260 : 120);
