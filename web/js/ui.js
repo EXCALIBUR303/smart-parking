@@ -37,6 +37,19 @@ const ICONS = {
   'arrow-down':  'M12 5v14M6 13l6 6 6-6',
   'arrow-up':    'M12 19V5M6 11l6-6 6 6',
   filter:   'M3 5h18l-7 8v6l-4 2v-8z',
+  more:     'M11 6a1 1 0 1 0 2 0 1 1 0 1 0-2 0M11 12a1 1 0 1 0 2 0 1 1 0 1 0-2 0M11 18a1 1 0 1 0 2 0 1 1 0 1 0-2 0',
+  download: 'M12 4v11M7 10l5 5 5-5M5 20h14',
+  edit:     'M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16v4ZM13.5 6.5l4 4',
+  trash:    'M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3',
+  wrench:   'M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.6 2.6-2.4-.6-.6-2.4Z',
+  history:  'M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5M12 7v5l3 2',
+  sidebar:  'M4 4h16v16H4zM9 4v16',
+  keyboard: 'M3 6h18v12H3zM7 10h.01M11 10h.01M15 10h.01M7 14h10',
+  'chev-left':  'M15 6l-6 6 6 6',
+  'chev-right': 'M9 6l6 6-6 6',
+  'chev-up':    'M6 15l6-6 6 6',
+  'chev-down':  'M6 9l6 6 6-6',
+  sort:     'M8 10l4-4 4 4M8 14l4 4 4-4',
 };
 
 export function icon(name, cls = '') {
@@ -128,7 +141,13 @@ export function emptyRow(tbody, colspan, title, body = '') {
 }
 
 /* --- Toasts -------------------------------------------------------------- */
-export function toast(title, body = '', kind = 'info') {
+/** An error toast that also names the database rule that refused the action,
+ *  when the server reported one (see api/errors.py). */
+export function errorToast(title, err) {
+  toast(title, err?.message || 'Something went wrong.', 'error', { rule: err?.rule });
+}
+
+export function toast(title, body = '', kind = 'info', { rule = null } = {}) {
   let host = document.querySelector('.toasts');
   if (!host) {
     host = document.createElement('div');
@@ -141,7 +160,8 @@ export function toast(title, body = '', kind = 'info') {
   el.className = `toast toast-${kind}`;
   el.innerHTML = `${icon(kind === 'error' ? 'alert' : kind === 'success' ? 'check' : 'info')}
     <div><div class="toast-title">${esc(title)}</div>
-    ${body ? `<div class="toast-body">${esc(body)}</div>` : ''}</div>`;
+    ${body ? `<div class="toast-body">${esc(body)}</div>` : ''}
+    ${rule ? `<div class="toast-rule">Database rule <code>${esc(rule)}</code></div>` : ''}</div>`;
   host.appendChild(el);
   enter(el, {});
   setTimeout(() => {
@@ -288,29 +308,53 @@ export function requireAuth() {
   return auth.user;
 }
 
+/* Per-viewer convenience only: storage can be missing or blocked, and the
+   shell must work identically without it. */
+const pref = {
+  get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch { /* ignore */ } },
+};
+
 export function mountShell(active, { title, subtitle = '', actions = '', metrics = false } = {}) {
   const user = requireAuth();
   if (!user) return null;
 
   const initials = (user.name || '?').split(' ').map((w) => w[0]).slice(0, 2).join('').toUpperCase();
-  const navHtml = NAV.map((g) => {
-    const items = g.items.filter((i) =>
-      (!i.staff || auth.isStaff) && (!i.admin || user.role === 'admin'));
-    if (!items.length) return '';
-    return `<div class="nav-group">${esc(g.group)}</div>` + items.map((i) => `
-      <a class="nav-link" href="${i.href}" ${i.href === active ? 'aria-current="page"' : ''}>
-        ${icon(i.icon)}<span>${esc(i.label)}</span>
-        <span class="nav-key" aria-hidden="true">${esc(i.key || '')}</span></a>`).join('');
-  }).join('');
+  const visible = NAV.map((g) => ({ ...g, items: g.items.filter((i) =>
+    (!i.staff || auth.isStaff) && (!i.admin || user.role === 'admin')) }))
+    .filter((g) => g.items.length);
+  const here = visible.flatMap((g) => g.items.map((i) => ({ ...i, group: g.group })))
+    .find((i) => i.href === active);
+
+  const navHtml = visible.map((g) => `<div class="nav-group">${esc(g.group)}</div>` +
+    g.items.map((i) => `
+      <a class="nav-link" href="${i.href}" title="${esc(i.label)}"
+         ${i.href === active ? 'aria-current="page"' : ''}>
+        ${icon(i.icon)}<span class="nav-label">${esc(i.label)}</span>
+        <span class="nav-key" aria-hidden="true"><kbd>G</kbd><kbd>${esc(i.key)}</kbd></span></a>`).join(''),
+  ).join('');
+
+  const crumbs = here && here.href !== 'dashboard.html' ? `
+    <nav class="crumbs" aria-label="Breadcrumb"><ol>
+      <li><a href="dashboard.html">SmartPark</a></li>
+      <li>${esc(here.group)}</li>
+      <li aria-current="page">${esc(here.label)}</li>
+    </ol></nav>` : `
+    <nav class="crumbs" aria-label="Breadcrumb"><ol>
+      <li>SmartPark</li><li aria-current="page">${esc(here?.label || title)}</li>
+    </ol></nav>`;
 
   document.body.innerHTML = `
     <a class="skip-link" href="#main">Skip to content</a>
-    <div class="shell">
+    <div class="shell" data-rail="${pref.get('sp.rail') === 'collapsed' ? 'collapsed' : 'open'}">
       <aside class="rail" id="rail">
         <div class="brand">
-          <div class="brand-mark" aria-hidden="true">SP</div>
-          <div><div class="brand-name">SmartPark</div>
+          <img class="brand-mark" src="img/mark.svg" alt="" width="34" height="34">
+          <div class="brand-text"><div class="brand-name">SmartPark</div>
                <div class="brand-sub">Control</div></div>
+          <button class="btn btn-icon btn-ghost btn-sm rail-toggle" id="rail-toggle"
+                  aria-controls="rail" aria-expanded="true"
+                  title="Collapse navigation">${icon('sidebar')}</button>
         </div>
         <nav class="nav" aria-label="Main">
           <span class="nav-indicator" id="nav-indicator" aria-hidden="true"></span>
@@ -335,6 +379,7 @@ export function mountShell(active, { title, subtitle = '', actions = '', metrics
                     aria-label="Open navigation" aria-expanded="false"
                     aria-controls="rail">${icon('menu')}</button>
             <div class="command-title">
+              ${crumbs}
               <h1>${esc(title)}</h1>
               ${subtitle ? `<div class="sub">${esc(subtitle)}</div>` : ''}
             </div>
@@ -387,10 +432,291 @@ export function mountShell(active, { title, subtitle = '', actions = '', metrics
     if (e.key === 'Escape' && rail.dataset.open === 'true') { setRail(false); menuBtn.focus(); }
   });
 
+  // Desktop rail collapses to an icon column; the choice is remembered.
+  const shell = document.querySelector('.shell');
+  const toggle = document.getElementById('rail-toggle');
+  const syncToggle = () => {
+    const collapsed = shell.dataset.rail === 'collapsed';
+    toggle.setAttribute('aria-expanded', String(!collapsed));
+    toggle.title = collapsed ? 'Expand navigation' : 'Collapse navigation';
+    toggle.setAttribute('aria-label', toggle.title);
+  };
+  syncToggle();
+  toggle.addEventListener('click', () => {
+    shell.dataset.rail = shell.dataset.rail === 'collapsed' ? 'open' : 'collapsed';
+    pref.set('sp.rail', shell.dataset.rail);
+    syncToggle();
+    requestAnimationFrame(settle);
+  });
+
+  bindShortcuts(visible.flatMap((g) => g.items));
   bindInteractive(document);
   return { user, content: document.getElementById('main'),
            metrics: document.getElementById('metrics') };
 }
+
+/* --- Keyboard shortcuts ---------------------------------------------------
+   Two-key sequences (G then a letter) rather than bare letters, so typing in a
+   field, or a screen reader's single-key commands, can never trigger a jump.
+   "/" focuses the page's search box and "?" lists everything. */
+function typingIn(el) {
+  return el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName));
+}
+
+function bindShortcuts(items) {
+  let armed = 0;
+  document.addEventListener('keydown', (e) => {
+    if (e.metaKey || e.ctrlKey || e.altKey || typingIn(e.target)) return;
+    if (document.querySelector('.scrim')) return;          // a dialog owns the keyboard
+    const k = e.key;
+    if (armed && Date.now() - armed < 1200) {
+      armed = 0;
+      const hit = items.find((i) => i.key.toLowerCase() === k.toLowerCase());
+      if (hit) { e.preventDefault(); location.href = hit.href; }
+      return;
+    }
+    if (k === 'g' || k === 'G') { armed = Date.now(); return; }
+    if (k === '/') {
+      const box = document.querySelector('#main input[type="search"], #main .search input');
+      if (box) { e.preventDefault(); box.focus(); box.select?.(); }
+      return;
+    }
+    if (k === '?') { e.preventDefault(); shortcutHelp(items); }
+  });
+}
+
+function shortcutHelp(items) {
+  const row = (keys, what) => `<tr><td>${keys.map((x) => `<kbd>${esc(x)}</kbd>`).join(' ')}</td>
+    <td>${esc(what)}</td></tr>`;
+  modal({
+    title: 'Keyboard shortcuts',
+    width: '440px',
+    body: `<table class="keys"><caption class="sr-only">Keyboard shortcuts</caption><tbody>
+      ${items.map((i) => row(['G', i.key], `Go to ${i.label}`)).join('')}
+      ${row(['/'], 'Search this page')}
+      ${row(['?'], 'Show this list')}
+      ${row(['Esc'], 'Close a dialog or panel')}
+    </tbody></table>`,
+    actions: [{ label: 'Done', variant: 'primary', onClick: (c) => c() }],
+  });
+}
+
+/* --- Data table -------------------------------------------------------------
+   One table for every list in the app: search, sortable headers (aria-sort),
+   pagination, CSV export of the filtered set, and an optional per-row actions
+   menu. Pages describe columns; this owns the behaviour.
+
+   column: { key, label, render?(row) -> HTML (must escape its own values),
+             value?(row) -> raw value for sort/search/CSV (default row[key]),
+             num?: right-align, sortable?: default true, csv?: false to omit } */
+export function dataTable(host, {
+  columns, rows = [], caption = 'Records', searchKeys = null, pageSize = 12,
+  searchPlaceholder = 'Search', emptyTitle = 'Nothing here yet', emptyBody = '',
+  csv = null, sort = null, rowActions = null, toolbar = '', onRowClick = null,
+} = {}) {
+  const sortAt = sort ? columns.findIndex((c) => c.key === sort.key) : -1;
+  const state = { rows, q: '', key: sortAt >= 0 ? sortAt : null, dir: sort?.dir || 'asc', page: 1 };
+  const val = (col, row) => (col.value ? col.value(row) : row[col.key]);
+  const searchable = columns.filter((c) => !searchKeys || searchKeys.includes(c.key));
+
+  host.innerHTML = `
+    <div class="dt">
+      <div class="dt-tools">
+        <div class="search dt-search">${icon('search')}
+          <input class="input" type="search" placeholder="${esc(searchPlaceholder)}"
+                 aria-label="${esc(searchPlaceholder)}"></div>
+        <span class="dt-count" aria-live="polite"></span>
+        <span class="spacer"></span>
+        ${toolbar}
+        ${csv ? `<button class="btn btn-sm" type="button" data-dt-csv>${icon('download')} Export CSV</button>` : ''}
+      </div>
+      <div class="table-wrap"><table>
+        <caption class="sr-only">${esc(caption)}</caption>
+        <thead><tr>${columns.map((c, i) => {
+          const can = c.sortable !== false;
+          return `<th scope="col" class="${c.num ? 'num' : ''}" ${can ? `aria-sort="none" data-col="${i}"` : ''}>
+            ${can ? `<button type="button" class="dt-sort">${esc(c.label)}${icon('sort', 'dt-sort-icon')}</button>`
+                  : esc(c.label)}</th>`;
+        }).join('')}${rowActions ? '<th scope="col" class="dt-act-h"><span class="sr-only">Actions</span></th>' : ''}</tr></thead>
+        <tbody></tbody>
+      </table></div>
+      <div class="dt-foot">
+        <span class="dt-range"></span>
+        <div class="dt-pages">
+          <button class="btn btn-icon btn-sm" type="button" data-dt-prev aria-label="Previous page">${icon('chev-left')}</button>
+          <span class="dt-page mono"></span>
+          <button class="btn btn-icon btn-sm" type="button" data-dt-next aria-label="Next page">${icon('chev-right')}</button>
+        </div>
+      </div>
+    </div>`;
+
+  const $ = (s) => host.querySelector(s);
+  const tbody = $('tbody');
+  const colspan = columns.length + (rowActions ? 1 : 0);
+
+  const filtered = () => {
+    const q = state.q.trim().toLowerCase();
+    let out = q ? state.rows.filter((r) =>
+      searchable.some((c) => String(val(c, r) ?? '').toLowerCase().includes(q))) : state.rows.slice();
+    if (state.key !== null) {
+      const col = columns[state.key];
+      const sign = state.dir === 'asc' ? 1 : -1;
+      out.sort((a, b) => {
+        const x = val(col, a), y = val(col, b);
+        if (x == null || x === '') return 1;           // blanks always last
+        if (y == null || y === '') return -1;
+        const nx = Number(x), ny = Number(y);
+        if (!Number.isNaN(nx) && !Number.isNaN(ny)) return (nx - ny) * sign;
+        return String(x).localeCompare(String(y), 'en', { numeric: true }) * sign;
+      });
+    }
+    return out;
+  };
+
+  function render() {
+    const list = filtered();
+    const pages = Math.max(1, Math.ceil(list.length / pageSize));
+    state.page = Math.min(state.page, pages);
+    const start = (state.page - 1) * pageSize;
+    const slice = list.slice(start, start + pageSize);
+
+    $('.dt-count').textContent = state.q
+      ? `${list.length} of ${state.rows.length}` : `${state.rows.length} ${state.rows.length === 1 ? 'record' : 'records'}`;
+
+    host.querySelectorAll('th[data-col]').forEach((th) => {
+      const on = Number(th.dataset.col) === state.key;
+      th.setAttribute('aria-sort', on ? (state.dir === 'asc' ? 'ascending' : 'descending') : 'none');
+    });
+
+    if (!slice.length) {
+      tbody.innerHTML = `<tr><td colspan="${colspan}" class="dt-empty">
+        <div class="empty">${icon(state.q ? 'search' : 'inbox')}
+          <div class="empty-title">${esc(state.q ? `No matches for “${state.q}”` : emptyTitle)}</div>
+          ${state.q ? '<div class="empty-action"><button class="btn btn-sm" type="button" data-dt-clear>Clear search</button></div>'
+                    : (emptyBody ? `<p>${esc(emptyBody)}</p>` : '')}
+        </div></td></tr>`;
+    } else {
+      tbody.innerHTML = slice.map((r, i) => `<tr data-i="${start + i}" ${onRowClick ? 'class="dt-clickable"' : ''}>
+        ${columns.map((c) => `<td class="${c.num ? 'num' : ''}">${c.render ? c.render(r) : esc(val(c, r) ?? '—')}</td>`).join('')}
+        ${rowActions ? `<td class="dt-act"><button class="btn btn-icon btn-sm btn-ghost" type="button"
+            data-dt-menu="${start + i}" aria-haspopup="menu" aria-label="More actions">${icon('more')}</button></td>` : ''}
+      </tr>`).join('');
+    }
+
+    const foot = $('.dt-foot');
+    foot.hidden = list.length <= pageSize;
+    $('.dt-range').textContent = list.length
+      ? `${start + 1}–${Math.min(start + pageSize, list.length)} of ${list.length}` : '';
+    $('.dt-page').textContent = `${state.page} / ${pages}`;
+    $('[data-dt-prev]').disabled = state.page <= 1;
+    $('[data-dt-next]').disabled = state.page >= pages;
+    state.list = list;
+  }
+
+  let t = 0;
+  $('.dt-search input').addEventListener('input', (e) => {
+    clearTimeout(t);
+    t = setTimeout(() => { state.q = e.target.value; state.page = 1; render(); }, 120);
+  });
+  host.addEventListener('click', (e) => {
+    const th = e.target.closest('th[data-col]');
+    if (th) {
+      const k = Number(th.dataset.col);
+      state.dir = state.key === k && state.dir === 'asc' ? 'desc' : 'asc';
+      state.key = k; render(); return;
+    }
+    if (e.target.closest('[data-dt-prev]')) { state.page--; render(); return; }
+    if (e.target.closest('[data-dt-next]')) { state.page++; render(); return; }
+    if (e.target.closest('[data-dt-clear]')) {
+      const box = $('.dt-search input'); box.value = ''; state.q = ''; render(); box.focus(); return;
+    }
+    if (e.target.closest('[data-dt-csv]')) {
+      downloadCSV(csv, columns.filter((c) => c.csv !== false), state.list || filtered(), val);
+      toast('Export ready', `${(state.list || []).length} rows saved as ${csv}`, 'success');
+      return;
+    }
+    const menuBtn = e.target.closest('[data-dt-menu]');
+    if (menuBtn) { openMenu(menuBtn, rowActions(state.list[Number(menuBtn.dataset.dtMenu)])); return; }
+    const tr = e.target.closest('tr[data-i]');
+    if (tr && onRowClick && !e.target.closest('button, a, input, select')) {
+      onRowClick(state.list[Number(tr.dataset.i)]);
+    }
+  });
+
+  render();
+  return {
+    setRows(next) { state.rows = next || []; render(); },
+    get rows() { return state.rows; },
+    el: host,
+  };
+}
+
+/* A spreadsheet treats a cell starting with = + - @ as a formula, so a plate or
+   name crafted that way could run in the operator's Excel. Prefix with '. */
+function csvCell(v) {
+  let s = v == null ? '' : String(v);
+  if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
+  return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+export function downloadCSV(filename, columns, rows, val = (c, r) => r[c.key]) {
+  const lines = [columns.map((c) => csvCell(c.label)).join(',')]
+    .concat(rows.map((r) => columns.map((c) => csvCell(val(c, r))).join(',')));
+  const blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = Object.assign(document.createElement('a'), { href: url, download: filename });
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+/* --- Actions menu -----------------------------------------------------------
+   One popover at a time, anchored to its button. Arrow keys move, Escape and
+   Tab close and return focus. Destructive items are styled, and should still
+   confirm in their own handler. */
+let menuOpen = null;
+export function openMenu(anchor, items) {
+  closeMenu();
+  const menu = document.createElement('div');
+  menu.className = 'menu';
+  menu.setAttribute('role', 'menu');
+  menu.innerHTML = items.map((it, i) => `<button type="button" role="menuitem" data-mi="${i}"
+      class="menu-item${it.danger ? ' menu-danger' : ''}" ${it.disabled ? 'disabled' : ''}>
+      ${icon(it.icon || 'arrow-right')}<span>${esc(it.label)}</span></button>`).join('');
+  document.body.appendChild(menu);
+
+  const r = anchor.getBoundingClientRect();
+  const w = menu.offsetWidth, h = menu.offsetHeight;
+  const below = r.bottom + 4 + h < innerHeight;
+  menu.style.top = `${(below ? r.bottom + 4 : r.top - h - 4) + scrollY}px`;
+  menu.style.left = `${Math.max(8, Math.min(r.right - w, innerWidth - w - 8)) + scrollX}px`;
+  anchor.setAttribute('aria-expanded', 'true');
+  enter(menu, { y: below ? -4 : 4 });
+
+  const buttons = () => [...menu.querySelectorAll('.menu-item:not([disabled])')];
+  buttons()[0]?.focus();
+  const close = (refocus = true) => {
+    menu.remove(); anchor.setAttribute('aria-expanded', 'false');
+    document.removeEventListener('mousedown', outside, true);
+    menuOpen = null;
+    if (refocus) anchor.focus();
+  };
+  const outside = (e) => { if (!menu.contains(e.target) && e.target !== anchor) close(false); };
+  document.addEventListener('mousedown', outside, true);
+  menu.addEventListener('keydown', (e) => {
+    const list = buttons(); const at = list.indexOf(document.activeElement);
+    if (e.key === 'ArrowDown') { e.preventDefault(); list[(at + 1) % list.length]?.focus(); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); list[(at - 1 + list.length) % list.length]?.focus(); }
+    else if (e.key === 'Escape' || e.key === 'Tab') { e.preventDefault(); close(); }
+  });
+  menu.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-mi]');
+    if (!b) return;
+    close(false);
+    items[Number(b.dataset.mi)].onClick?.();
+  });
+  menuOpen = close;
+}
+export function closeMenu() { menuOpen?.(false); }
 
 
 /* ---------------------------------------------------------------------------

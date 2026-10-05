@@ -32,7 +32,9 @@ export const auth = {
  *  the server's own wording, which for integrity failures is the mapped
  *  constraint message from api/errors.py. */
 export class ApiError extends Error {
-  constructor(message, status) { super(message); this.status = status; this.name = 'ApiError'; }
+  constructor(message, status, rule = null) {
+    super(message); this.status = status; this.rule = rule; this.name = 'ApiError';
+  }
 }
 
 async function request(method, path, body) {
@@ -71,7 +73,7 @@ async function request(method, path, body) {
         return field ? `${field}: ${e.msg}` : e.msg;
       }).join('; ');
     }
-    throw new ApiError(msg, res.status);
+    throw new ApiError(msg, res.status, data?.rule || null);
   }
   return data;
 }
@@ -126,6 +128,8 @@ export const api = {
 
   customers:     (q) => get(`/api/customers${q ? `?q=${encodeURIComponent(q)}` : ''}`),
   createCustomer:(b) => post('/api/customers', b),
+  updateCustomer:(id, b) => patch(`/api/customers/${id}`, b),
+  deleteCustomer:(id) => del(`/api/customers/${id}`),
   vehicles:      (q = {}) => {
     const p = new URLSearchParams();
     Object.entries(q).forEach(([k, v]) => { if (v) p.set(k, v); });
@@ -133,6 +137,21 @@ export const api = {
   },
   createVehicle: (b)  => post('/api/vehicles', b),
   deleteVehicle: (id) => del(`/api/vehicles/${id}`),
+  updateVehicle: (id, b) => patch(`/api/vehicles/${id}`, b),
+
+  setSlotService: (id, inService, note) =>
+    patch(`/api/slots/${id}/service`, { in_service: inService, note: note || null }),
+  payments: (q = {}) => {
+    const p = new URLSearchParams();
+    Object.entries(q).forEach(([k, v]) => { if (v && v !== 'all') p.set(k, v); });
+    return get(`/api/payments?${p}`);
+  },
+  activity: (f, limit = 15) => get(`/api/activity?facility_id=${f}&limit=${limit}`),
+  audit:    (q = {}) => {
+    const p = new URLSearchParams();
+    Object.entries(q).forEach(([k, v]) => { if (v) p.set(k, v); });
+    return get(`/api/audit?${p}`);
+  },
 
   dashboard: (f) => get(`/api/dashboard?facility_id=${f}`),
   report: {
@@ -143,5 +162,6 @@ export const api = {
     passUsage: ()  => get('/api/reports/pass-usage'),
     violations:()  => get('/api/reports/violations'),
     freeSlots: (f) => get(`/api/reports/free-slots?facility_id=${f}`),
+    vehicleHistory: (plate) => get(`/api/reports/vehicle-history?plate=${encodeURIComponent(plate)}`),
   },
 };

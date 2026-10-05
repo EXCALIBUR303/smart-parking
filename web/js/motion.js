@@ -104,7 +104,12 @@ export async function closePanel(scrim, panel, { from = 'centre' } = {}) {
     ? animate(panel, { transform: 'translateX(28px)', opacity: 0 }, { duration: 0.18, easing: EASE })
     : animate(panel, { opacity: 0, transform: 'translateY(8px)' }, { duration: 0.18, easing: EASE });
   animate(scrim, { opacity: 0 }, { duration: 0.18, easing: EASE });
-  await out.finished?.catch(() => {});
+  // Animation frames pause in a background tab, so the exit animation may
+  // never finish. The timer guarantees the dialog is removed regardless.
+  await Promise.race([
+    Promise.resolve(out.finished || out).catch(() => {}),
+    new Promise((r) => setTimeout(r, 320)),
+  ]);
 }
 
 /* -- 6. Skeletons -------------------------------------------------------
