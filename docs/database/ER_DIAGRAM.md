@@ -21,7 +21,63 @@ and a login belongs to at most one customer.
 
 ---
 
-## 1. Full model
+## Start here: the ER diagrams in Chen notation
+
+The classic textbook notation: **rectangles** are entities, **ellipses** are
+attributes, **diamonds** are relationships. The key below explains every shape and
+line; the diagrams are generated from the live database by
+[`tests/gen_schema_docs.py`](../../tests/gen_schema_docs.py), so cardinality
+(1 or N), participation (single or double line) and keys are read from the real
+constraints, not drawn by hand.
+
+### How to read them
+
+![How to read the ER diagrams](er/chen_legend.png)
+
+### All 17 entities and 31 relationships
+
+![Overview](er/chen_overview.png)
+
+*Attributes are left off this one to keep it legible. Read a diamond as a
+sentence from parent to child, for example "FACILITY is divided into FLOOR" and
+"PARKING_SESSION produces BILL". Double lines show the child must take part, for
+example every FLOOR must belong to a FACILITY.*
+
+### The same model with every attribute, in five parts
+
+| Diagram | Entities with attributes | Shows |
+|---|---|---|
+| [Facility structure](er/chen_facility.png) | FACILITY, FLOOR, ZONE, SLOT, VEHICLE_TYPE | The building: facility, floors, zones, bays and what each bay is built for |
+| [Users, customers, vehicles and audit](er/chen_people.png) | APP_USER, CUSTOMER, VEHICLE, AUDIT_LOG | Who signs in, who parks, what they drive, and who changed what |
+| [Tariffs and passes](er/chen_pricing.png) | TARIFF, PASS_TYPE, PARKING_PASS | What parking costs and the passes that waive it |
+| [Reservations and parking sessions](er/chen_sessions.png) | RESERVATION, PARKING_SESSION | Booking a bay and the stay itself |
+| [Billing and violations](er/chen_billing.png) | BILL, PAYMENT, VIOLATION | What is owed, what was paid, and what went wrong |
+
+Each diagram is also available as a zoomable `.svg` in the same folder.
+
+![Facility structure](er/chen_facility.png)
+
+![Users, customers, vehicles and audit](er/chen_people.png)
+
+![Tariffs and passes](er/chen_pricing.png)
+
+![Reservations and parking sessions](er/chen_sessions.png)
+
+![Billing and violations](er/chen_billing.png)
+
+**Two things worth knowing when you read them.** Foreign-key columns are not drawn
+as attributes, because the relationship diamond *is* the foreign key (the full column
+list is in [DATA_DICTIONARY.md](DATA_DICTIONARY.md) and the tables with their keys
+are in [RELATIONAL_SCHEMA.md](RELATIONAL_SCHEMA.md)). And `total_amount` on BILL is
+the one derived attribute: the database computes it as `base_amount + tax_amount`.
+
+---
+
+## 1. Full model in crow's-foot notation (Mermaid)
+
+The same schema in the other common notation, with column types, drawn by GitHub
+itself from the text below.
+
 
 ```mermaid
 erDiagram

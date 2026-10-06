@@ -118,6 +118,17 @@ Two operators cannot be handed the same bay: `fn_gate_entry` locks it with
 `SELECT … FOR UPDATE SKIP LOCKED` inside the transaction that inserts the
 session.
 
+### ER diagram
+
+![ER diagram](docs/database/er/chen_overview.png)
+
+*Chen notation: rectangles are entities, diamonds are relationships, double lines mean
+every row must take part. The key to every shape, and the same model with all
+attributes in five parts, is in [ER_DIAGRAM.md](docs/database/ER_DIAGRAM.md). The
+relational schema (tables, keys and foreign keys) is in
+[RELATIONAL_SCHEMA.md](docs/database/RELATIONAL_SCHEMA.md), and the whole schema as
+one SQL file is [db/schema_snapshot.sql](db/schema_snapshot.sql).*
+
 ---
 
 # Getting it running
@@ -354,10 +365,11 @@ JSONB, views):
 psql -d smartpark -f docs/database/queries.sql
 ```
 
-**Regenerate the generated documents** from the live schema and real test runs:
+**Regenerate the generated documents** from the live schema and real test runs
+(the ER diagrams need Graphviz: `brew install graphviz`):
 
 ```bash
-./.venv/bin/python tests/gen_data_dictionary.py && ./.venv/bin/python tests/gen_testing_doc.py
+./.venv/bin/python tests/gen_data_dictionary.py && ./.venv/bin/python tests/gen_schema_docs.py && ./.venv/bin/python tests/gen_testing_doc.py
 ```
 
 Captured results are in [`docs/TESTING.md`](docs/TESTING.md).
@@ -402,6 +414,7 @@ smart-parking/
 │   │   ├── 017_zero_bill_is_paid.sql
 │   │   ├── 018_audit_and_rule_comments.sql
 │   │   └── 019_planned_facilities.sql     ← 3 planned sites, inactive
+│   ├── schema_snapshot.sql  the whole finished schema in one file (no data)
 │   ├── scripts/             refresh_demo_history.sql (moves demo data up to today)
 │   └── tests/               constraint, lifecycle and RLS tests
 ├── api/                     Python (FastAPI) application layer
@@ -413,7 +426,8 @@ smart-parking/
 ├── web/                     the interface: HTML pages, css/, js/, img/
 ├── tests/                   e2e, pytest, browser checks, doc generators
 ├── docs/
-│   ├── database/            ER diagram, normalization, data dictionary, queries
+│   ├── REPOSITORY_GUIDE.md  every file explained
+│   ├── database/            ER diagrams, relational schema, normalization, data dictionary, queries
 │   ├── screens/             25 output screens (1440 × 900)
 │   ├── API.md               every endpoint
 │   ├── DEMO_GUIDE.md        a ten-minute walkthrough for the review
@@ -485,7 +499,9 @@ timestamp — the same information an operator would write on a paper receipt.
 | Document | What it covers |
 |---|---|
 | [REVIEW_MAPPING.md](docs/REVIEW_MAPPING.md) | Every Review 1/2/3 rubric line → the exact file that satisfies it |
-| [ER_DIAGRAM.md](docs/database/ER_DIAGRAM.md) | Entity–relationship diagrams |
+| [REPOSITORY_GUIDE.md](docs/REPOSITORY_GUIDE.md) | **Every file in this repository explained**, and how one click travels through them |
+| [ER_DIAGRAM.md](docs/database/ER_DIAGRAM.md) | The ER diagrams in Chen notation (with a key to every shape), plus crow's-foot |
+| [RELATIONAL_SCHEMA.md](docs/database/RELATIONAL_SCHEMA.md) | The relational schema: relations, foreign keys, candidate keys, creation order |
 | [NORMALIZATION.md](docs/database/NORMALIZATION.md) | Functional dependencies and the 1NF → 2NF → 3NF derivation |
 | [DATA_DICTIONARY.md](docs/database/DATA_DICTIONARY.md) | Every table and column, generated from the live schema |
 | [queries.sql](docs/database/queries.sql) | 18 demonstration queries |
