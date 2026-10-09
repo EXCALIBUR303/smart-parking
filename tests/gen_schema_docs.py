@@ -16,6 +16,9 @@ the script refuses to run if a foreign key has no verb.
 
 Needs Graphviz:  brew install graphviz
 Run:  ./.venv/bin/python tests/gen_schema_docs.py     (database must be running)
+
+Print variants for a written report (more compact, larger text, PNG only):
+      ./.venv/bin/python tests/gen_schema_docs.py --print --out /some/folder
 """
 import collections
 import math
@@ -28,8 +31,12 @@ import psycopg
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 DOCS = ROOT / "docs" / "database"
-OUT = DOCS / "er"
+PRINT = "--print" in sys.argv     # compact layout with larger text, sized for a printed A4 page
+OUT = pathlib.Path(sys.argv[sys.argv.index("--out") + 1]) if "--out" in sys.argv else DOCS / "er"
 OUT.mkdir(parents=True, exist_ok=True)
+FS = 1.35 if PRINT else 1.0        # text size factor
+SC = 0.8 if PRINT else 1.0       # spacing factor for the hand-placed layouts
+RS = 1.1 if PRINT else 1.0        # radius factor for the rings of attributes
 
 # --------------------------------------------------------------------- catalogue
 con = psycopg.connect(f"dbname={os.environ.get('SMARTPARK_DB', 'smartpark')}")
@@ -136,12 +143,12 @@ TABLE_GROUP["audit_log"] = "audit"
 
 
 def run_dot(engine, src, name, dpi=130):
-    for fmt in ("png", "svg"):
+    for fmt in (("png",) if PRINT else ("png", "svg")):
         args = [engine, f"-T{fmt}", "-o", str(OUT / f"{name}.{fmt}")]
         if fmt == "png":
-            args.insert(1, f"-Gdpi={dpi}")
+            args.insert(1, f"-Gdpi={220 if PRINT else dpi}")
         subprocess.run(args, input=src, text=True, check=True)
-    print(f"  er/{name}.png")
+    print(f"  {name}.png")
 
 
 def is_fk(t, c):
@@ -157,8 +164,8 @@ def relational_diagram():
     """Tables as boxes, one arrow per foreign key from child to parent (parents on top).
     Which column is the foreign key is written inside the child box, so the arrows stay
     plain and readable. Dashed red arrows are composite foreign keys."""
-    L = ['digraph R { rankdir=TB; nodesep=0.5; ranksep=1.1; splines=true; bgcolor=white; pad=0.4;',
-         'node [shape=plain, fontname="Helvetica"]; edge [arrowsize=0.9];',
+    L = ['digraph R { rankdir=TB; nodesep=' + ('0.3' if PRINT else '0.5') + '; ranksep=' + ('0.8' if PRINT else '1.1') + '; splines=true; bgcolor=white; pad=0.4;',
+         f'node [shape=plain, fontname="Helvetica", fontsize={14 * FS:g}]; edge [arrowsize=0.9];',
          'labelloc=t; fontsize=22; fontname="Helvetica-Bold"; '
          'label="SmartPark: relational schema (17 relations, arrows run from a foreign key to the table it references)";']
     fk_target = {}
@@ -166,7 +173,7 @@ def relational_diagram():
         for c in f["cols"]:
             fk_target.setdefault((f["child"], c), []).append(f["parent"])
     for t in TABLES:
-        rows = [f'<TR><TD COLSPAN="3" BGCOLOR="{GROUP_COLOR[TABLE_GROUP[t]]}"><B>{t.upper()}</B></TD></TR>']
+        rows = [f'<TR><TD COLSPAN="{2 if PRINT else 3}" BGCOLOR="{GROUP_COLOR[TABLE_GROUP[t]]}"><B>{t.upper()}</B></TD></TR>']
         for n, typ, nn, gen in COLS[t]:
             typ = typ.replace("timestamp with time zone", "timestamptz").replace("character varying", "varchar") \
                      .replace("time without time zone", "time")
@@ -179,9 +186,9 @@ def relational_diagram():
                 nm, key = n, ""
             if unique_single(t, n) and n not in PK[t]:
                 key = (key + " " if key else "") + "UK"
-            rows.append(f'<TR><TD ALIGN="LEFT">{nm}</TD>'
-                        f'<TD ALIGN="LEFT"><FONT COLOR="#777777" POINT-SIZE="9">{typ}</FONT></TD>'
-                        f'<TD ALIGN="LEFT"><FONT COLOR="#1F4E79" POINT-SIZE="9">{key or "&#160;"}</FONT></TD></TR>')
+            type_cell = '' if PRINT else (f'<TD ALIGN="LEFT"><FONT COLOR="#777777" POINT-SIZE="9">{typ}</FONT></TD>')
+            rows.append(f'<TR><TD ALIGN="LEFT">{nm}</TD>' + type_cell +
+                        f'<TD ALIGN="LEFT"><FONT COLOR="#1F4E79" POINT-SIZE="{9 * FS:g}">{key or "&#160;"}</FONT></TD></TR>')
         L.append(f'{t} [label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="3" '
                  f'BGCOLOR="white" COLOR="#444444">{"".join(rows)}</TABLE>>];')
     drawn = set()
@@ -197,10 +204,10 @@ def relational_diagram():
 
 # ===================================================================== Chen parts
 FONT = 'fontname="Helvetica"'
-ENT = f'shape=box, style=filled, fillcolor="#C9DDF2", penwidth=2, fontsize=15, {FONT}, margin="0.25,0.15"'
-CTX = f'shape=box, style="dashed,filled", fillcolor="#F4F4F4", penwidth=1.3, fontsize=13, {FONT}, margin="0.2,0.12"'
-REL = f'shape=diamond, style=filled, fillcolor="#FFE7A3", penwidth=1.5, fontsize=11, {FONT}'
-ATT = f'shape=ellipse, style=filled, fillcolor=white, fontsize=11, {FONT}'
+ENT = f'shape=box, style=filled, fillcolor="#C9DDF2", penwidth=2, fontsize={15 * FS:g}, {FONT}, margin="0.25,0.15"'
+CTX = f'shape=box, style="dashed,filled", fillcolor="#F4F4F4", penwidth=1.3, fontsize={13 * FS:g}, {FONT}, margin="0.2,0.12"'
+REL = f'shape=diamond, style=filled, fillcolor="#FFE7A3", penwidth=1.5, fontsize={11 * FS:g}, {FONT}'
+ATT = f'shape=ellipse, style=filled, fillcolor=white, fontsize={11 * FS:g}, {FONT}'
 
 
 def attrs_of(t):
@@ -236,11 +243,11 @@ def attr_node(nid, name, kind):
 def edge_to_rel(ent, rel, card, total):
     color = '"black:white:black"' if total else "black"
     return (f'{ent} -> {rel} [dir=none, color={color}, penwidth=1.2, headlabel="", '
-            f'taillabel="{card}", labeldistance=2.2, labelfontsize=13, fontname="Helvetica-Bold", '
+            f'taillabel="{card}", labeldistance=2.2, labelfontsize={13 * FS:g}, fontname="Helvetica-Bold", '
             f'labelfontname="Helvetica-Bold", len=2.3];')
 
 
-def place_attrs(center, k, occupied, margin=24.0, radii=(2.35, 3.35)):
+def place_attrs(center, k, occupied, margin=24.0, radii=(2.35 * RS, 3.35 * RS)):
     """Positions for k attribute ellipses around `center`, spread over the angular gaps
     between the entity's relationship lines (so no attribute sits on a line).
     Alternating radii stagger neighbours so wide labels do not collide."""
@@ -274,6 +281,8 @@ def chen(title, ents_with_attrs, ctx, pairs, name, pos=None, engine="neato", wit
     L = ['graph G { ', f'layout={engine}; overlap=true; splines=line; pad=0.4; bgcolor=white; '
          'outputorder=edgesfirst;',
          f'labelloc=t; fontsize=20; fontname="Helvetica-Bold"; label="{title}";']
+    if pos:
+        pos = {k: (v[0] * SC, v[1] * SC) for k, v in pos.items()}
     shown = set(ents_with_attrs) | set(ctx)
     pin = lambda t: f', pos="{pos[t][0]},{pos[t][1]}!"' if pos and t in pos else ""
     for t in ents_with_attrs:
@@ -288,6 +297,10 @@ def chen(title, ents_with_attrs, ctx, pairs, name, pos=None, engine="neato", wit
                 if other and pos and other in pos:
                     occupied.append(math.degrees(math.atan2(pos[other][1] - pos[t][1],
                                                             pos[other][0] - pos[t][0])))
+            # also steer clear of every other box on the page, related or not
+            for other, xy in (pos or {}).items():
+                if other != t:
+                    occupied.append(math.degrees(math.atan2(xy[1] - pos[t][1], xy[0] - pos[t][0])))
             attrs = attrs_of(t)
             spots = place_attrs(pos[t], len(attrs), occupied)
             for (n, kind), (x, y) in zip(attrs, spots):
@@ -304,16 +317,16 @@ def chen(title, ents_with_attrs, ctx, pairs, name, pos=None, engine="neato", wit
         L.append(f'{rid} [{REL}, label="{verb}"{mid}];')
         pcard, ccard = ("1", "1") if info["one_to_one"] else ("1", "N")
         L.append(f'{parent} -- {rid} [color="black", penwidth=1.2, taillabel="{pcard}", labeldistance=2.4, '
-                 f'labelfontsize=13, labelfontname="Helvetica-Bold", len=2.1];')
+                 f'labelfontsize={13 * FS:g}, labelfontname="Helvetica-Bold", len=2.1];')
         cc = '"black:white:black"' if info["total"] else "black"
         L.append(f'{rid} -- {child} [color={cc}, penwidth=1.2, headlabel="{ccard}", labeldistance=2.4, '
-                 f'labelfontsize=13, labelfontname="Helvetica-Bold", len=2.1];')
+                 f'labelfontsize={13 * FS:g}, labelfontname="Helvetica-Bold", len=2.1];')
     L.append('}')
     run_dot(engine, "\n".join(L), name)
 
 
 def overview():
-    L = ['digraph G { rankdir=TB; nodesep=0.45; ranksep=0.55; splines=true; pad=0.4; bgcolor=white;',
+    L = [f'digraph G {{ rankdir=TB; nodesep={0.3 if PRINT else 0.45}; ranksep={0.4 if PRINT else 0.55}; splines=true; pad=0.4; bgcolor=white;',
          'labelloc=t; fontsize=20; fontname="Helvetica-Bold"; '
          'label="ER diagram: all 17 entities and 31 relationships (their attributes are on the module diagrams)";']
     for t in TABLES:
@@ -325,10 +338,10 @@ def overview():
         L.append(f'{rid} [{REL}, label="{v}"];')
         pcard, ccard = ("1", "1") if info["one_to_one"] else ("1", "N")
         L.append(f'{parent} -> {rid} [dir=none, color=black, penwidth=1.2, taillabel="{pcard}", '
-                 f'labeldistance=1.6, labelfontsize=12, labelfontname="Helvetica-Bold"];')
+                 f'labeldistance=1.6, labelfontsize={12 * FS:g}, labelfontname="Helvetica-Bold"];')
         cc = '"black:white:black"' if info["total"] else "black"
         L.append(f'{rid} -> {child} [dir=none, color={cc}, penwidth=1.2, headlabel="{ccard}", '
-                 f'labeldistance=1.6, labelfontsize=12, labelfontname="Helvetica-Bold"];')
+                 f'labeldistance=1.6, labelfontsize={12 * FS:g}, labelfontname="Helvetica-Bold"];')
     L.append('}')
     run_dot("dot", "\n".join(L), "chen_overview")
 
@@ -368,7 +381,8 @@ def legend():
         c = '"black:white:black"' if double else "black"
         L.append(f'{nid}a -- {nid}b [color={c}, penwidth=1.2];')
 
-    LX, RX = 0, 11.4
+    LX, RX = (0, 0) if PRINT else (0, 11.4)
+    RY = -7.8 if PRINT else 0          # the right-hand items sit below the left-hand ones when printing
     node("e1", ENT, '"ENTITY"', LX, 7.4)
     text(LX, 7.4, "Rectangle: an entity, a thing we keep records of.\\nIt becomes a table.")
     node("e2", CTX, '"ENTITY"', LX, 6.1)
@@ -382,26 +396,26 @@ def legend():
     node("a4", ATT + ', style="dashed,filled"', '"derived"', LX, 0.9)
     text(LX, 0.9, "Dashed ellipse: a derived attribute, computed from others\\n(total_amount = base_amount + tax_amount).")
 
-    node("r1", REL, '"relationship"', RX, 7.4)
-    text(RX + 0.4, 7.4, "Diamond: a relationship between two entities (a foreign key).\\nRead it as a sentence: PARENT verb CHILD.")
-    L.append(f'p1 [{ENT}, label="PARENT", pos="{RX - 0.3},6.1!"]; c1 [{ENT}, label="CHILD", pos="{RX + 1.9},6.1!"];')
+    node("r1", REL, '"relationship"', RX, 7.4 + RY)
+    text(RX + 0.4, 7.4 + RY, "Diamond: a relationship between two entities (a foreign key).\\nRead it as a sentence: PARENT verb CHILD.")
+    L.append(f'p1 [{ENT}, label="PARENT", pos="{RX - 0.3},{6.1 + RY}!"]; c1 [{ENT}, label="CHILD", pos="{RX + 1.9},{6.1 + RY}!"];')
     L.append('p1 -- c1 [color=black, penwidth=1.2, taillabel="1", headlabel="N", labeldistance=2.2, '
              'labelfontsize=14, labelfontname="Helvetica-Bold"];')
-    text(RX + 2.9, 6.1, "1 and N: cardinality. One PARENT has many CHILDREN.\\n1 on both ends means one-to-one.")
-    pair("s1", RX, 4.8)
-    text(RX + 1.3, 4.8, "Single line: partial participation. A row may exist without\\ntaking part (the foreign key may be NULL).")
-    pair("s2", RX, 3.5, double=True)
-    text(RX + 1.3, 3.5, "Double line: total participation. Every row must take part\\n(the foreign key is NOT NULL).")
+    text(RX + 2.9, 6.1 + RY, "1 and N: cardinality. One PARENT has many CHILDREN.\\n1 on both ends means one-to-one.")
+    pair("s1", RX, 4.8 + RY)
+    text(RX + 1.3, 4.8 + RY, "Single line: partial participation. A row may exist without\\ntaking part (the foreign key may be NULL).")
+    pair("s2", RX, 3.5 + RY, double=True)
+    text(RX + 1.3, 3.5 + RY, "Double line: total participation. Every row must take part\\n(the foreign key is NOT NULL).")
     L.append(f'note [shape=plaintext, fontsize=12, label="Foreign-key columns are not drawn as attributes: the relationship diamond is the foreign key.\\n'
              f'Not used here: weak entities (double rectangle) and multivalued attributes (double ellipse). Every entity has its own\\n'
              f'primary key, and repeating groups such as payments were moved into their own entity during normalization.", '
-             f'pos="{RX + 1.5},1.5!"];')
+             f'pos="{RX + 1.5},{1.5 + RY}!"];')
     L.append('}')
     src = "\n".join(L)
-    for fmt in ("png", "svg"):
+    for fmt in (("png",) if PRINT else ("png", "svg")):
         args = ["neato", f"-T{fmt}", "-o", str(OUT / f"chen_legend.{fmt}")]
         if fmt == "png":
-            args.insert(1, "-Gdpi=130")
+            args.insert(1, f"-Gdpi={220 if PRINT else 130}")
         subprocess.run(args, input=src, text=True, check=True)
     print("  er/chen_legend.png")
 
@@ -495,4 +509,5 @@ if __name__ == "__main__":
     relational_diagram()
     legend()
     chen_diagrams()
-    write_markdown()
+    if not PRINT:
+        write_markdown()
